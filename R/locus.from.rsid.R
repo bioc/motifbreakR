@@ -24,7 +24,7 @@
 #'                            dbSNP = SNPlocs.Hsapiens.dbSNP.20120608,
 #'                            search.genome = BSgenome.Hsapiens.UCSC.hg19)
 #'
-#' @importFrom BSgenome snpid2grange snplocs
+#' @importFrom BSgenome snpsById snplocs
 #' @importFrom Biostrings DNAStringSet
 #' @export
 snps.from.rsid <- function(rsid = NULL, dbSNP = NULL,
@@ -45,7 +45,7 @@ snps.from.rsid <- function(rsid = NULL, dbSNP = NULL,
     stop(paste(paste(bad.names, collapse = " "), "are not rsids, perhaps you want to import your snps from a bed or vcf file with snps.from.file()?"))
   }
   rsid <- unique(rsid)
-  rsid.grange <- snpid2grange(dbSNP, rsid)
+  rsid.grange <- snpsById(dbSNP, rsid, ifnotfound="warning")
   rsid.grange <- change.to.search.genome(rsid.grange, search.genome)
   rsid.refseq <- getSeq(search.genome, rsid.grange)
   rsid.grange$UCSC.reference <- as.character(rsid.refseq)
@@ -54,10 +54,10 @@ snps.from.rsid <- function(rsid = NULL, dbSNP = NULL,
     if (length(alt.allele) > 1L) {
       snp <- do.call("c", replicate(length(alt.allele), snp))
       snp$UCSC.alternate <- alt.allele
-      names(snp) <- paste(gsub("^", "rs", snp$RefSNP_id), alt.allele, sep = ":")
+      names(snp) <- paste(snp$RefSNP_id, alt.allele, sep = ":")
     } else {
       snp$UCSC.alternate <- alt.allele
-      names(snp) <- gsub("^", "rs", snp$RefSNP_id)
+      names(snp) <- snp$RefSNP_id
     }
     return(snp)
   })
@@ -158,7 +158,7 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
     genome.name <- genome(search.genome)[[1]]
     snps <- readVcf(file, genome.name)
     snps <- snps[elementLengths(info(snps)[, "VT"]) == 1, ]
-    snps <- rowRanges(snps)[unlist(info(snps)[, "VT"]) == "SNP", ]
+    snps <- rowRanges(snps)[unlist(info(snps)[, "VT"] == "SNP"), ]
     ALTS <- unlist(snps$ALT)
     numsplits <- elementLengths(snps$ALT)
     snps <- rep(snps, times = numsplits)
@@ -283,8 +283,8 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
         dbsnp.for.noid$REF <- snps.noid.ref[copy.dbsnp]
         dbsnp.for.noid$ALT <- snps.noid.alt[copy.dbsnp]
         colnames(mcols(dbsnp.for.noid))[1] <- "SNP_id"
-        names(dbsnp.for.noid) <- gsub("^", "rs", dbsnp.for.noid$SNP_id)
-        warning(paste0("rs", dbsnp.for.noid$SNP_id, " was found as a match for ",
+        names(dbsnp.for.noid) <- dbsnp.for.noid$SNP_id
+        warning(paste0(dbsnp.for.noid$SNP_id, " was found as a match for ",
                        snps.noid$name[copy.dbsnp], "; using entry from dbSNP"))
         no.dbsnp <- c(dbsnp.for.noid, no.dbsnp)
       }
@@ -296,7 +296,7 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
       if (length(snps.rsid) > 0) {
         snps.rsid.out <- snps.from.rsid(snps.rsid$name, dbSNP = dbSNP, search.genome = search.genome)
         colnames(mcols(snps.rsid.out))[1] <- "SNP_id"
-        names(snps.rsid.out) <- gsub("^", "rs", snps.rsid.out$SNP_id)
+        names(snps.rsid.out) <- snps.rsid.out$SNP_id
         snps.out <- c(snps.rsid.out, no.dbsnp)
       } else {
         snps.out <- no.dbsnp
