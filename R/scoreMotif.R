@@ -1065,7 +1065,7 @@ DNAmotifAlignment.2snp <- function(pwms, result) {
 #' example.results
 #' \donttest{
 #' library(BSgenome.Hsapiens.UCSC.hg19)
-#' plotMB(example.results, "rs2661839", effect = "strong")
+#' plotMB(results = example.results, rsid = "rs1006140", effect = "strong", altAllele = "C")
 #' }
 #' @importFrom motifStack DNAmotifAlignment colorset motifStack plotMotifLogo plotMotifLogoStack
 #' @importClassesFrom motifStack pfm marker
