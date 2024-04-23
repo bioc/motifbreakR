@@ -254,7 +254,8 @@ maxThresholdWindows <- function(window.frame) {
 #' @import S4Vectors
 #' @import BiocGenerics
 #' @import IRanges
-#' @importFrom Biostrings getSeq replaceLetterAt reverseComplement complement replaceAt pairwiseAlignment insertion deletion matchPattern
+#' @importFrom Biostrings getSeq replaceLetterAt reverseComplement complement replaceAt matchPattern
+#' @importFrom pwalign pairwiseAlignment insertion deletion
 #' @importFrom TFMPvalue TFMpv2sc
 #' @importFrom stringr str_locate_all str_sub
 scoreSnpList <- function(fsnplist, pwmList, method = "default", bkg = NULL,
