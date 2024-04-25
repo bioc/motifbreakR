@@ -1314,3 +1314,163 @@ exportMBresults <- function(results, file, format = c("tsv")) {
     write.csv(x = results, file = file, row.names = FALSE, col.names = TRUE)
   }
 }
+
+#' Find Corresponding TF Binding From The ReMap2022 Project
+#'
+#' @param remap_data Character; either the path to a local copy of the non-redundant
+#'   peak set, or one of \code{hg38} for Homo sapiens, \code{mm10} for Mus musculus,
+#'   \code{dm6} for Drosophila melanogaster, or \code{TAIR10} for Arabidopsis thaliana,
+#'   to be queried (slowly) online.
+#' @details \code{snps.from.file} takes a character vector describing the file path
+#'  to a bed file that contains the necissary information to generate the input for
+#'  \code{motifbreakR} see \url{http://www.genome.ucsc.edu/FAQ/FAQformat.html#format1}
+#'  for a complete description of the BED format.  Our convention deviates in that there
+#'  is a required format for the name field.  \code{name} is defined as chromosome:start:REF:ALT
+#'  or the rsid from dbSNP (if you've included the optional SNPlocs argument).
+#'  For example if you were to include rs123 in it's alternate
+#'  format it would be entered as chr7:24966446:C:A
+#' @return a GRanges object containing:
+#'  \item{SNP_id}{The rsid of the snp with the "rs" portion stripped}
+#'  \item{alleles_as_ambig}{THE IUPAC ambiguity code between the reference and
+#'  alternate allele for this SNP}
+#'  \item{REF}{The reference allele for the SNP}
+#'  \item{ALT}{The alternate allele for the SNP}
+#' @examples
+#'  library(BSgenome.Drerio.UCSC.danRer7)
+#'
+#' @importFrom rtracklayer import
+#' @importFrom Biostrings IUPAC_CODE_MAP uniqueLetters BStringSetList DNA_ALPHABET
+#' @importFrom VariantAnnotation readVcf ref alt isSNV VcfFile ScanVcfParam
+#' @importFrom SummarizedExperiment rowRanges
+#' @importFrom stringr str_sort str_split
+#' @export
+
+findSupportingRemapPeaks <- function(results, genome) {
+  genome <- match.arg(genome, c("hg38", "mm10", "dm6", "TAIR10_TF", "TAIR10_HISTONE"))
+
+  remap_links <- list(
+    hg38      = "https://remap.univ-amu.fr/storage/remap2022/hg38/MACS2/remap2022_nr_macs2_hg38_v1_0.bed.gz",
+    mm10      = "https://remap.univ-amu.fr/storage/remap2022/mm10/MACS2/remap2022_nr_macs2_mm10_v1_0.bed.gz",
+    dm6       = "https://remap.univ-amu.fr/storage/remap2022/dm6/MACS2/remap2022_nr_macs2_dm6_v1_0.bed.gz",
+    TAIR10_TF = "https://remap.univ-amu.fr/storage/remap2022/tair10/tf/MACS2/remap2022_nr_macs2_TAIR10_v1_0.bed.gz",
+    TAIR10_HISTONE = "https://remap.univ-amu.fr/storage/remap2022/tair10/histones/MACS2/remap2022_histone_nr_macs2_TAIR10_v1_0.bed.gz"
+  )
+
+  results$matchingBindingEvent <- NA
+  results$matchingCelltype <- NA
+
+  uniqmb <- results
+  mcols(uniqmb) <- NULL
+  names(uniqmb) <- NULL
+  uniqmb <- sort(unique(uniqmb))
+
+  remap_binding <- loadPeakFile(remap_links, genome)
+  remap_binding <- subsetByOverlaps(remap_binding, uniqmb)
+
+  if(length(remap_binding) < 1) return(results)
+
+  mb_overlaps <- findOverlaps(results, remap_binding)
+  variant_to_peak <- unique(data.frame(variant = names(results[queryHits(mb_overlaps), ]), tf.binding = remap_binding[subjectHits(mb_overlaps), ]$name))
+  tf_ct <- stringr::str_split(variant_to_peak$tf.binding, ":")
+  variant_to_peak$tf.binding <- vapply(tf_ct, FUN = `[`, character(1), 1)
+  variant_to_peak$tf.celltype <- vapply(tf_ct, FUN = `[`, character(1), 2)
+  variant_to_peak$tf.celltype <- lapply(variant_to_peak$tf.celltype, function(x) {stringr::str_split(x, ",", simplify = T)[1, ]})
+  mcol_variant_to_gene <- data.frame(variant = names(results), tf.gene = results$geneSymbol, motif = results$providerId)
+
+  if("manuallyCuratedGeneMotifAssociationTable" %in% slotNames(attributes(results)$motifs)) {
+    mb_genelist <- attributes(results)$motifs@manuallyCuratedGeneMotifAssociationTable
+    mb_genelist <- unique(mb_genelist[mb_genelist$motif %in% results$providerId, c("motif", "tf.gene")])
+    mb_genelist_aug <- unique(data.frame(motif = results$providerId, tf.gene = results$geneSymbol))
+    mb_genelist <- unique(rbind(mb_genelist, mb_genelist_aug))
+    variant_to_gene <- data.frame(variant = names(results), motif = results$providerId)
+    variant_to_gene_master <- merge(variant_to_gene, mb_genelist, all.x = TRUE, sort = FALSE)
+    variant_to_gene <- unique(variant_to_gene_master[, c("variant", "tf.gene")])
+  } else {
+    variant_to_gene_master <- mcol_variant_to_gene
+    variant_to_gene <- unique(variant_to_gene_master[, c("variant", "tf.gene")])
+  }
+
+  variant_mb_peak <- merge(variant_to_gene_master, variant_to_peak, all.x = TRUE, sort = FALSE)
+  variant_mb_peak <- unique(variant_mb_peak[variant_mb_peak$tf.gene == variant_mb_peak$tf.binding, ])
+  variant_mb_peak <- variant_mb_peak[!is.na(variant_mb_peak$variant), c("variant", "tf.binding", "tf.celltype", "motif")]
+
+  split_vmbp <- split(variant_mb_peak, as.factor(variant_mb_peak$variant))
+
+  for(variant in seq_along(split_vmbp)) {
+    pvariant <- names(split_vmbp[variant])
+    vgm <- split_vmbp[[variant]]
+    mbv_sel <- which(mcol_variant_to_gene$variant == pvariant)
+    vgm$motif <- factor(vgm$motif, levels = mcol_variant_to_gene[mbv_sel, "motif"])
+    names(vgm$tf.celltype) <- vgm$tf.binding
+    vgmm <- vgm[which(vgm$motif %in% mcol_variant_to_gene$motif), ]
+    vgmm <- split(vgmm, vgmm$motif)
+    vgmg <- vgm[which(vgm$tf.gene %in% mcol_variant_to_gene$tf.gene), ]
+    vgmg <- split(vgmg, vgmg$motif)
+    vgm <- mapply(rbind, vgmm, vgmg, SIMPLIFY = F)
+
+    results[mbv_sel]$matchingBindingEvent <- lapply(vgm, function(x) {unique(x$tf.binding)})[results[mbv_sel]$providerId]
+    results[mbv_sel]$matchingCelltype <- lapply(vgm, function(x) {x$tf.celltype})[results[mbv_sel]$providerId]
+    if(any(lengths(results[mbv_sel]$matchingBindingEvent) == 0)) {
+      results[mbv_sel][lengths(results[mbv_sel]$matchingBindingEvent) == 0]$matchingBindingEvent <- NA
+      results[mbv_sel][lengths(results[mbv_sel]$matchingCelltype) == 0]$matchingCelltype <- NA
+    }
+  }
+  attributes(results)$peaks <- remap_binding
+  return(results)
+}
+
+#' @importFrom tools R_user_dir
+#' @importFrom BiocFileCache BiocFileCache
+.get_cache <- function() {
+  cache <- R_user_dir("motifbreakR", which="cache")
+  BiocFileCache(cache = cache, ask = F)
+}
+
+cachePeakFile <- function(fileURL, genome) {
+  bfc <- .get_cache()
+  rname <- paste("remap2022", genome, sep = "_")
+  rid <- bfcquery(bfc, genome, "rname")$rid
+  if (!length(rid)) {
+    rid <- names(bfcadd(bfc, rname, fileURL, ext = ".Rdata", download = FALSE))
+  }
+  if (!isFALSE(bfcneedsupdate(bfc, rid))) {
+    message("downloading peak file")
+    bfcdownload(bfc, rid, ask = FALSE, FUN=convertPeakFile)
+    message("peak download complete")
+  }
+  bfcrpath(bfc, rids = rid)
+}
+
+#' @importFrom vroom vroom
+loadPeakFile2 <- function(url_list, genome) {
+  peak_path <- cachePeakFile(url_list[[genome]], genome)
+  remap_peaks <- GRanges(vroom(peak_path, delim = "\t",
+                               col_names = c("chr", "start", "end", "name",
+                                             "score", "strand", "tstart",
+                                             "tend", "color"),
+                               col_types = c("ciiciciic"),
+                               col_select = c(chr, start, end, name),
+                               progress = FALSE))
+  return(remap_peaks)
+}
+
+loadPeakFile <- function(url_list, genome) {
+  peak_path <- cachePeakFile(url_list[[genome]], genome)
+  remap_peaks <- readRDS(peak_path)
+  return(remap_peaks)
+}
+
+convertPeakFile <- function(from, to) {
+  message("processing peak file")
+  remap_peaks <- GRanges(vroom(from, delim = "\t",
+                               col_names = c("chr", "start", "end", "name",
+                                             "score", "strand", "tstart",
+                                             "tend", "color"),
+                               col_types = c("ciiciciic"),
+                               col_select = c(chr, start, end, name),
+                               progress = FALSE))
+  saveRDS(remap_peaks, file = to)
+  message("processing peak file")
+  TRUE
+}
+
