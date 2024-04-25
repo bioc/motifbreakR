@@ -17,14 +17,14 @@
 #'  \item{ALT}{The alternate allele for the SNP}
 #' @examples
 #'  library(BSgenome.Hsapiens.UCSC.hg19)
-#'  library(SNPlocs.Hsapiens.dbSNP142.GRCh37)
+#'  library(SNPlocs.Hsapiens.dbSNP155.GRCh37)
 #'  snps.file <- system.file("extdata", "pca.enhancer.snps", package = "motifbreakR")
 #'  snps <- as.character(read.table(snps.file)[,1])
 #'  snps.mb <- snps.from.rsid(snps[1],
-#'                            dbSNP = SNPlocs.Hsapiens.dbSNP142.GRCh37,
+#'                            dbSNP = SNPlocs.Hsapiens.dbSNP155.GRCh37,
 #'                            search.genome = BSgenome.Hsapiens.UCSC.hg19)
 #'
-#' @importFrom BSgenome snpsById snplocs
+#' @importFrom BSgenome snpsById snplocs snpsByOverlaps
 #' @importFrom Biostrings DNAStringSet DNAString DNAStringSetList
 #' @export
 snps.from.rsid <- function(rsid = NULL, dbSNP = NULL,
@@ -131,7 +131,7 @@ unlistColumn <- function(x, column = NULL) {
   }
 }
 
-formatVcfOut <- function(x, gseq = search.genome) {
+formatVcfOut <- function(x, gseq) {
   x$SNP_id <- names(x)
   mcols(x) <- mcols(x)[, c("SNP_id", "REF", "ALT")]
   x$REF <- unlist(DNAStringSetList(x$REF))
@@ -163,6 +163,9 @@ formatVcfOut <- function(x, gseq = search.genome) {
 #' @param search.genome an object of class BSgenome for the species you are interrogating;
 #'  see \code{\link[BSgenome]{available.genomes}} for a list of species
 #' @param format Character; one of \code{bed} or \code{vcf}
+#' @param indels Logical; allow the import of indels.
+#' @param check.unnamed.for.rsid Logical; check snps in the form chr:pos:ref:alt
+#'  for corresponding rsid, lookup may be slow, requires param dbSNP.
 #' @seealso See \code{\link{motifbreakR}} for analysis; See \code{\link{snps.from.rsid}}
 #'   for an alternate method for generating a list of variants.
 #' @details \code{snps.from.file} takes a character vector describing the file path
@@ -181,7 +184,7 @@ formatVcfOut <- function(x, gseq = search.genome) {
 #'  \item{ALT}{The alternate allele for the SNP}
 #' @examples
 #'  library(BSgenome.Drerio.UCSC.danRer7)
-#'  library(SNPlocs.Hsapiens.dbSNP142.GRCh37)
+#'  library(SNPlocs.Hsapiens.dbSNP155.GRCh37)
 #'  snps.bed.file <- system.file("extdata", "danRer.bed", package = "motifbreakR")
 #'  # see the contents
 #'  read.table(snps.bed.file, header = FALSE)
@@ -191,12 +194,12 @@ formatVcfOut <- function(x, gseq = search.genome) {
 #'                            format = "bed")
 #'
 #' @importFrom rtracklayer import
-#' @importFrom Biostrings IUPAC_CODE_MAP uniqueLetters BStringSetList
+#' @importFrom Biostrings IUPAC_CODE_MAP uniqueLetters BStringSetList DNA_ALPHABET
 #' @importFrom VariantAnnotation readVcf ref alt isSNV VcfFile ScanVcfParam
 #' @importFrom SummarizedExperiment rowRanges
 #' @importFrom stringr str_sort str_split
 #' @export
-snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, format = "bed", indels = FALSE) {
+snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, format = "bed", indels = FALSE, check.unnamed.for.rsid = FALSE) {
   if (format == "vcf") {
     if (!inherits(search.genome, "BSgenome")) {
       stop(paste0(search.genome, " is not a BSgenome object.\n", "Run availible.genomes() and choose the appropriate BSgenome object"))
@@ -252,20 +255,16 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
   } else {
     if (format == "bed") {
       snps <- import(file, format = "bed")
-      if (!indels) {
-        if (any(grepl("rs", snps$name)) & (!inherits(dbSNP, "SNPlocs"))) {
-          stop(paste0(file, " contains at least one variant with an rsID and no SNPlocs has been indicated\n",
-                      "Please run availible.SNPs() to check for availble SNPlocs"))
-        }
-      } else if (inherits(dbSNP, "SNPlocs")) {
-        warning("Variants are not compared to nor extracted from SNPlocs objects when indels are included.",
-                " SNPlocs will not be used.")
+      if (any(grepl("rs", snps$name)) & (!inherits(dbSNP, "SNPlocs"))) {
+        stop(paste0(file, " contains at least one variant with an rsID and no SNPlocs has been indicated\n",
+                    "Please run availible.SNPs() to check for availble SNPlocs"))
       }
       if (!inherits(search.genome, "BSgenome")) {
         stop(paste0(search.genome, " is not a BSgenome object.\n", "Run availible.genomes() and choose the appropriate BSgenome object"))
       }
       ## spit snps into named and unnamed snps
       snps.noid <- snps[!grepl("rs", snps$name), ]
+      snps.rsid <- snps[grepl("rs", snps$name), ]
       ## get ref for unnamed snps
       snps.ref <- getSeq(search.genome, snps.noid)
       snps.ref <- as.character(snps.ref)
@@ -289,7 +288,7 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
       snps.alt <- unlist(snps.alt.split)
       is.indel <- nchar(snps.alt) > 1 | nchar(snps.ref) > 1
       if (!indels) {
-        snps <- snps[!is.indel]
+        snps.noid <- snps.noid[!is.indel]
         snps.ref <- snps.ref[!is.indel]
         snps.alt <- snps.alt[!is.indel]
       }
@@ -320,7 +319,7 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
         equal.to.ref <- snps.alt == snps.ref
         if (sum(equal.to.ref) > 0) {
           warning(paste0(sum(equal.to.ref), " user variants are the same as the reference genome ",
-                         search.genome@provider_version, " for ", search.genome@common_name, "\n These variants were excluded"))
+                         metadata(search.genome)$genome, " for ", metadata(search.genome)$common_name, "\n These variants were excluded"))
         }
         snps.noid <- snps.noid[alt.allele.is.valid]
         snps.ref <- snps.ref[alt.allele.is.valid]
@@ -330,8 +329,28 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
       snps.noid$ALT <- snps.alt
       strand(snps.noid) <- "*"
       names(snps.noid) <- paste(as.character(snps.noid), snps.ref, snps.alt, sep = ":")
+      if(check.unnamed.for.rsid) {
+        snps.noid <- change.to.search.genome(snps.noid, dbSNP)
+        snps.actually.name <- GRanges(snpsByOverlaps(dbSNP, snps.noid, drop.rs.prefix = FALSE))
+        which.actually.name <- findOverlaps(snps.actually.name, snps.noid)
+        if(length(which.actually.name) > 0) {
+          if(length(which.actually.name) < 50) {
+          warning(paste0(snps.actually.name[queryHits(which.actually.name)]$RefSNP_id,
+                         " was found as a match for ",
+                         snps.noid[subjectHits(which.actually.name),]$name,
+                         "; using entry from dbSNP\n  "))
+          } else {
+            warning(length(which.actually.name), " variants had names replaced using entries from dbSNP")
+          }
+          snps.noid[subjectHits(which.actually.name),]$name <- snps.actually.name[queryHits(which.actually.name)]$RefSNP_id
+          snps.noid <- change.to.search.genome(snps.noid, search.genome)
+          names(snps.noid) <- snps.noid$name
+        } else {
+          snps.noid <- change.to.search.genome(snps.noid, search.genome)
+        }
+      }
       snps.noid <- formatVcfOut(snps.noid, search.genome)
-      snps.rsid <- snps[grepl("rs", snps$name), ]
+      # if (!indels) {
       ## get object for named snps
       if (length(snps.rsid) > 0) {
         snps.rsid.out <- snps.from.rsid(snps.rsid$name, dbSNP = dbSNP, search.genome = search.genome)
@@ -341,6 +360,9 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
       } else {
         snps.out <- snps.noid
       }
+      # } else {
+      # snps.out <- snps.noid
+      # }
       attributes(snps.out)$genome.package <- attributes(search.genome)$pkgname
       return(sort(snps.out))
     } else {
@@ -349,6 +371,7 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
   }
 }
 
+#' @describeIn snps.from.file Allows the use of indels by default
 #' @export
 variants.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, format = "bed") {
   return(snps.from.file(file = file, dbSNP = dbSNP, search.genome = search.genome, format = format, indels = TRUE))

@@ -72,7 +72,7 @@ pca.snps <- as.character(read.table(pca.snps.file)[,1])
 The simplest form of a `r BiocStyle::Biocpkg("motifbreakR")` analysis is summarized as follows:
 ```{r outline, eval=FALSE}
 variants <- snps.from.rsid(rsid = pca.snps,
-                           dbSNP = SNPlocs.Hsapiens.dbSNP142.GRCh37,
+                           dbSNP = SNPlocs.Hsapiens.dbSNP155.GRCh37,
                            search.genome = BSgenome.Hsapiens.UCSC.hg19)
 motifbreakr.results <- motifbreakR(snpList = variants, pwmList = MotifDb, threshold = 0.9)
 plotMB(results = motifbreakr.results, rsid = "rs7837328", effect = "strong")
@@ -99,14 +99,14 @@ More to the point here are the two methods for reading in the variants.
 
 
 
-We use the `r Biocannopkg("SNPlocs.Hsapiens.dbSNP142.GRCh37")` which is the SNP locations and alleles defined in [dbSNP142](http://www.ncbi.nlm.nih.gov/projects/SNP/snp_summary.cgi?view+summary=view+summary&build_id=142) as a source for looking up our rsIDs and `r Biocannopkg("BSgenome.Hsapiens.UCSC.hg19")` which holds the reference sequence for [UCSC genome build hg19](http://www.ncbi.nlm.nih.gov/assembly/2758/). Additional SNPlocs packages are availble from Bioconductor.
+We use the `r Biocannopkg("SNPlocs.Hsapiens.dbSNP155.GRCh37")` which is the SNP locations and alleles defined in [dbSNP155](http://www.ncbi.nlm.nih.gov/projects/SNP/snp_summary.cgi?view+summary=view+summary&build_id=155) as a source for looking up our rsIDs and `r Biocannopkg("BSgenome.Hsapiens.UCSC.hg19")` which holds the reference sequence for [UCSC genome build hg19](http://www.ncbi.nlm.nih.gov/assembly/2758/). Additional SNPlocs packages are availble from Bioconductor.
 
 ```{r fromrsid, message=FALSE, cache=TRUE}
-library(SNPlocs.Hsapiens.dbSNP142.GRCh37) # dbSNP142 in hg19
+library(SNPlocs.Hsapiens.dbSNP155.GRCh37) # dbSNP155 in hg19
 library(BSgenome.Hsapiens.UCSC.hg19)     # hg19 genome
 head(pca.snps)
 snps.mb <- snps.from.rsid(rsid = pca.snps,
-                          dbSNP = SNPlocs.Hsapiens.dbSNP142.GRCh37,
+                          dbSNP = SNPlocs.Hsapiens.dbSNP155.GRCh37,
                           search.genome = BSgenome.Hsapiens.UCSC.hg19)
 snps.mb
 ```
@@ -130,24 +130,24 @@ read.table(snps.bed.file, header = FALSE)
 ```
 Seeing as we have some SNPs listed by their rsIDs we can query those by including a SNPlocs object as an argument to `snps.from.file`
 ```{r getbedrs, message=FALSE, echo = TRUE, eval = FALSE}
-library(SNPlocs.Hsapiens.dbSNP142.GRCh37)
+library(SNPlocs.Hsapiens.dbSNP155.GRCh37)
 #import the BED file
 snps.mb.frombed <- snps.from.file(file = snps.bed.file,
-                                  dbSNP = SNPlocs.Hsapiens.dbSNP142.GRCh37,
+                                  dbSNP = SNPlocs.Hsapiens.dbSNP155.GRCh37,
                                   search.genome = BSgenome.Hsapiens.UCSC.hg19,
-                                  format = "bed")
+                                  format = "bed", check.unnamed.for.rsid = TRUE)
 snps.mb.frombed
 ```
 ```{r getbedrs.t, message=TRUE, echo = FALSE, eval = TRUE, cache=TRUE}
-library(SNPlocs.Hsapiens.dbSNP142.GRCh37)
+library(SNPlocs.Hsapiens.dbSNP155.GRCh37)
 example.snpfrombed <- system.file("extdata", "example.snpfrombed.rda", package = "motifbreakR")
 load(example.snpfrombed)
-message("Warning message:
-In snps.from.file(file = snps.bed.file, dbSNP = SNPlocs.Hsapiens.dbSNP142.GRCh37:
-  7601289 was found as a match for chr2:12594018:G:A; using entry from dbSNP")
+message("Warning in snps.from.file(file = snps.bed.file, dbSNP = SNPlocs.Hsapiens.dbSNP155.GRCh37,  :
+  rs7601289 was found as a match for chr2:12594018:G:A; using entry from dbSNP
+  rs11753604 was found as a match for chr6:44503246:A:T; using entry from dbSNP")
 snps.mb.frombed
 ```
-We see also that one of our custom variants `chr2:12594018:G:A` was actually already included in dbSNP, and was therefor annotated in the output as `rs7601289`
+We see also that two of our custom variants `chr2:12594018:G:A` and `chr6:44503246:A:T` were actually already included in dbSNP155, and were therefor annotated in the output as `rs7601289` and `rs11753604` respectively.
 
 If our BED file includes no rsIDs, then we may omit the `dbSNP` argument from the function. This example uses variants from *Danio rerio*
 ```{r getbedcust, message=FALSE, cache=TRUE}
@@ -222,22 +222,25 @@ We have several options that we may pass to the function, the main ones that wil
 
 Here we specify the `snpList`, `pwmList`, `threshold` that we declare as the cutoff for reporting results, `filterp` set to true declares that we are filtering by p-value, the `method`, and `bkg` the relative nucleotide frequency of A, C, G, and T.
 
+For the purposes of this small example, we use the `SerialParam` back end. However, for larger variant lists, `MulticoreParam` or one of the other `r Biocpkg("BiocParallel")` back-ends could speed up completion.
+
 ```{r runmotifbreakr, message=TRUE, cache=TRUE}
-results <- motifbreakR(snpList = snps.mb[1:5], filterp = TRUE,
-                       pwmList = hocomoco,
+results <- motifbreakR(snpList = snps.mb[1:12], filterp = TRUE,
+                       pwmList = subset(MotifDb, 
+                                        dataSource %in% c("HOCOMOCOv11-core-A", "HOCOMOCOv11-core-B", "HOCOMOCOv11-core-C")),
                        threshold = 1e-4,
                        method = "ic",
                        bkg = c(A=0.25, C=0.25, G=0.25, T=0.25),
-                       BPPARAM = BiocParallel::bpparam())
+                       BPPARAM = BiocParallel::SerialParam())
 ```
 The results reveal which variants disrupt which motifs, and to which degree.  If we want to examine a single variant, we can select one like this:
 ```{r getonesnp, cache=TRUE}
-rs1006140 <- results[names(results) %in% "rs1006140"]
+rs1006140 <- results[results$SNP_id == "rs1006140"]
 rs1006140
 ```
 Here we can see that SNP rs1006140 disrupts multiple motifs. We can then check what the pvalue for each allele is with regard to each motif, using `calculatePvalue`.
 ```{r calcp.show, eval=FALSE}
-rs1006140 <- calculatePvalue(rs1006140)
+rs1006140 <- calculatePvalue(rs1006140, granularity = 1e-6)
 rs1006140
 ```
 ```{r calcp, cache=TRUE, echo=FALSE}
@@ -258,7 +261,8 @@ By default `motifbreakR` uses `bpparam()` as an argument to `BPPARAM` and will u
 ## *Step 3* | Visualize
 Now that we have our results, we can visualize them with the function `plotMB`.  Lets take a look at rs1006140.
 ```{r plotting, cache=TRUE, fig.retina=2, fig.align='center', fig.height=8, fig.width=6}
-plotMB(results = results, rsid = "rs1006140", effect = "strong")
+plotMB(results = results, rsid = "rs1006140", effect = "strong", altAllele = "G")
+plotMB(results = results, rsid = "rs1006140", effect = "strong", altAllele = "C")
 ```
 <!-- <div class="figure" style="text-align: center"> -->
 <!--   <img width="75%" src="motifbreakr_plot.png" /> -->
@@ -365,6 +369,8 @@ a desired p-value e.g 1e-4, we perform a rough filter on the results by rounding
 decimal place, and calculating a scoring threshold based upon that. The second step is to use the function `calculatePvalue()`
 on a selection of results which will change the `Refpvalue` and `Altpvalue` columns in the output from `NA` to the p-value
 calculated by `TFMsc2pv`.  This can be (although not always) a very memory and time intensive process if the algorithm doesn't converge rapidly.
+
+P-values can also be calculated in parallel, it is highly recommended to round the PWM matrix with the granularity argument. This trades the accuracy of the p-value calculation for speed of convergence. For most purposes a range of 1e-4 to 1e-6 is an acceptable trade off between accuracy and speed.
 
 # Session Info
 ```{r, cache=TRUE}

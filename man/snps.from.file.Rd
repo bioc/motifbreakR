@@ -2,6 +2,7 @@
 % Please edit documentation in R/locus.from.rsid.R
 \name{snps.from.file}
 \alias{snps.from.file}
+\alias{variants.from.file}
 \title{Import SNPs from a BED file or VCF file for use in motifbreakR}
 \usage{
 snps.from.file(
@@ -9,7 +10,15 @@ snps.from.file(
   dbSNP = NULL,
   search.genome = NULL,
   format = "bed",
-  indels = FALSE
+  indels = FALSE,
+  check.unnamed.for.rsid = FALSE
+)
+
+variants.from.file(
+  file = NULL,
+  dbSNP = NULL,
+  search.genome = NULL,
+  format = "bed"
 )
 }
 \arguments{
@@ -23,6 +32,11 @@ see Details for a description of the required format}
 see \code{\link[BSgenome]{available.genomes}} for a list of species}
 
 \item{format}{Character; one of \code{bed} or \code{vcf}}
+
+\item{indels}{Logical; allow the import of indels.}
+
+\item{check.unnamed.for.rsid}{Logical; check snps in the form chr:pos:ref:alt
+for corresponding rsid, lookup may be slow, requires param dbSNP.}
 }
 \value{
 a GRanges object containing:
@@ -45,9 +59,14 @@ Import SNPs from a BED file or VCF file for use in motifbreakR
  For example if you were to include rs123 in it's alternate
  format it would be entered as chr7:24966446:C:A
 }
+\section{Functions}{
+\itemize{
+\item \code{variants.from.file()}: Allows the use of indels by default
+
+}}
 \examples{
  library(BSgenome.Drerio.UCSC.danRer7)
- library(SNPlocs.Hsapiens.dbSNP142.GRCh37)
+ library(SNPlocs.Hsapiens.dbSNP155.GRCh37)
  snps.bed.file <- system.file("extdata", "danRer.bed", package = "motifbreakR")
  # see the contents
  read.table(snps.bed.file, header = FALSE)
