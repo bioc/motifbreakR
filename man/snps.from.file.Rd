@@ -11,6 +11,7 @@ snps.from.file(
   search.genome = NULL,
   format = "bed",
   indels = FALSE,
+  biomart.dataset = NULL,
   check.unnamed.for.rsid = FALSE
 )
 
@@ -18,6 +19,7 @@ variants.from.file(
   file = NULL,
   dbSNP = NULL,
   search.genome = NULL,
+  biomart.dataset = NULL,
   format = "bed"
 )
 }

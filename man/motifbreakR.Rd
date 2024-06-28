@@ -62,8 +62,6 @@ a GRanges object containing:
  \item{scoreAlt}{The score as determined by the scoring method, when the sequence contains the alternate variant allele}
  \item{Refpvalue}{p-value for the match for the pctRef score, initially set to \code{NA}. see \code{\link{calculatePvalue}} for more information}
  \item{Altpvalue}{p-value for the match for the pctAlt score, initially set to \code{NA}. see \code{\link{calculatePvalue}} for more information}
- \item{alleleRef}{The proportional frequency of the reference allele at position \code{motifPos} in the motif}
- \item{alleleAlt}{The proportional frequency of the alternate allele at position \code{motifPos} in the motif}
  \item{altPos}{the position, relative to the reference allele, of the alternate allele}
  \item{alleleDiff}{The difference between the score on the reference allele and the score on the alternate allele}
  \item{alleleEffectSize}{The ratio of the \code{alleleDiff} and the maximal score of a sequence under the PWM}
