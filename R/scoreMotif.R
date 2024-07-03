@@ -1201,6 +1201,16 @@ plotMB <- function(results, rsid, reverseMotif = TRUE, effect = c("strong", "wea
   return(invisible(NULL))
 }
 
+#' Run Shiny version of the motifbreakR package.
+#' @return returns a \code{\link{shinyAppDir}} that launches the shiny app when printed.
+#' @examples
+#' library(motifbreakR)
+#'
+#' app <- shiny_motifbreakR()
+#'
+#' if (interactive()) {
+#'   shiny::runApp(app)
+#' }
 #' @import shiny bslib bsicons
 #' @importFrom DT renderDT DTOutput datatable formatRound JS
 #' @importFrom BSgenome available.genomes
