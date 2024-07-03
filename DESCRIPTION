@@ -1,7 +1,7 @@
 Package: motifbreakR
 Title: A Package For Predicting The Disruptiveness Of Single Nucleotide
         Polymorphisms On Transcription Factor Binding Sites
-Version: 2.17.1
+Version: 2.18.2
 Authors@R: c(person(given="Simon Gert", family="Coetzee",
         email="simon.coetzee@cshs.org", role = c("aut", "cre")),
         person(given="Dennis J.", family="Hazelett",
@@ -28,11 +28,17 @@ Imports: methods, grDevices, stringr, parallel,
         BiocParallel, motifStack, Gviz, matrixStats, TFMPvalue, SummarizedExperiment
 Suggests: BSgenome.Hsapiens.UCSC.hg19,
         SNPlocs.Hsapiens.dbSNP155.GRCh37, knitr, rmarkdown,
-        BSgenome.Drerio.UCSC.danRer7, BiocStyle
+        BSgenome.Drerio.UCSC.danRer7, BiocStyle,
+        BSgenome.Hsapiens.1000genomes.hs37d5,
+        BSgenome.Hsapiens.UCSC.hg19,
+        BSgenome.Hsapiens.UCSC.hg19.masked,
+        BSgenome.Hsapiens.NCBI.GRCh38,
+        BSgenome.Hsapiens.UCSC.hg38.masked,
+        BSgenome.Hsapiens.UCSC.hg38
 VignetteBuilder: knitr
 Encoding: UTF-8
 License: GPL-2
 BugReports: https://github.com/Simon-Coetzee/motifbreakR/issues
 biocViews: ChIPSeq, Visualization, MotifAnnotation, Transcription
 NeedsCompilation: no
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.2

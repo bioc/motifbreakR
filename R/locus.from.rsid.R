@@ -4,7 +4,12 @@
 #' @param dbSNP an object of class SNPlocs to lookup rsids; see \code{availible.SNPs} in
 #'   \code{\link[BSgenome]{injectSNPs}} to check for availible SNPlocs
 #' @param search.genome an object of class BSgenome for the species you are interrogating;
-#'  see \code{\link[BSgenome]{available.genomes}} for a list of species
+#'  see \code{\link[BSgenome]{available.genomes}} for a list of species.
+#' @param biomart.dataset a Mart object from \code{\link{useEnsembl}} specifying
+#'  the \code{snps} biomart, which dataset i.e., \code{hsapiens_snp}, and which
+#'  version i.e., \code{111} or \code{GRCm39}. This wilSNP and must
+#'  be compatible with search.genome selections, and rather query from biomaRt,
+#'  which may be considerably faster than a lookup from a SNPlocs object.
 #' @seealso See \code{\link{motifbreakR}} for analysis; See \code{\link{snps.from.file}}
 #'   for an alternate method for generating a list of variants.
 #' @details \code{snps.from.rsid} take an rsid, or character vector of rsids and
@@ -24,17 +29,26 @@
 #'                            dbSNP = SNPlocs.Hsapiens.dbSNP155.GRCh37,
 #'                            search.genome = BSgenome.Hsapiens.UCSC.hg19)
 #'
+#'  ## alternatively using biomaRt
+#'
+#'  library(biomaRt)
+#'  library(BSgenome.Hsapiens.UCSC.hg19)
+#'  ensembl_snp <- useEnsembl(biomart = "snps",
+#'                            dataset = "hsapiens_snp",
+#'                            version = "112")
+#'  snps.mb <- snps.from.rsid(snps,
+#'                            biomart.dataset = ensembl_snp,
+#'                            search.genome = BSgenome.Hsapiens.UCSC.hg38)
+#'
 #' @importFrom BSgenome snpsById snplocs snpsByOverlaps
 #' @importFrom Biostrings DNAStringSet DNAString DNAStringSetList
+#' @importFrom biomaRt useEnsembl getBM searchDatasets
 #' @export
 snps.from.rsid <- function(rsid = NULL, dbSNP = NULL,
-                           search.genome = NULL) {
+                           search.genome = NULL,
+                           biomart.dataset = NULL) {
   if (is.null(rsid)) {
     stop("no RefSNP IDs have been found, please include RefSNP ID numbers")
-  }
-  if (!inherits(dbSNP, "SNPlocs")) {
-    stop(paste0("dbSNP argument was not provided with a valid SNPlocs object.\n",
-                "Please run availible.SNPs() to check for availible SNPlocs"))
   }
   if (!inherits(search.genome, "BSgenome")) {
     stop(paste0("search.genome argument was not provided with a valid BSgenome object.\n",
@@ -45,6 +59,53 @@ snps.from.rsid <- function(rsid = NULL, dbSNP = NULL,
     stop(paste(paste(bad.names, collapse = " "), "are not rsids, perhaps you want to import your snps from a bed or vcf file with snps.from.file()?"))
   }
   rsid <- unique(rsid)
+  if (!is.null(biomart.dataset)) {
+    ens.genome <- searchDatasets(biomart.dataset, pattern = biomart.dataset@dataset)$version[[1]]
+    ens.genome <- Seqinfo(genome = ens.genome)
+    ens.seqlevel <- seqnames(keepStandardChromosomes(ens.genome))
+    seqlevelsStyle(ens.genome) <- seqlevelsStyle(search.genome)
+    compatible_genome <- genome(ens.genome)[[1]] == genome(search.genome)[[1]]
+    if(!compatible_genome) stop("bioMart genome and BSgenome are not compatible")
+    bm.snp <- getBM(attributes = c('refsnp_id','chr_name','chrom_start','chrom_end','allele'),
+                    filters = c("snp_filter", "chr_name"),
+                    values = list(rsid, ens.seqlevel),
+                    mart = biomart.dataset)
+    bm.snp$split_id <- factor(bm.snp$refsnp_id)
+    bm.snp <- bm.snp[order(bm.snp$split_id),]
+    allele <- stringr::str_split(bm.snp$allele, pattern = "/")
+    snps.ref <- vapply(allele,
+                       function(x) {
+                         x[[1]]
+                       }, character(1))
+    snps.alt.split <- Map(f = function(x,y) {
+      x[2:y]
+    }, allele, lengths(allele))
+    bm.snp <- split(bm.snp, bm.snp$refsnp_id, )
+    rep.vars <- vapply(snps.alt.split, length, integer(1))
+    bm.snp <- rep(bm.snp, rep.vars)
+    snps.ref <- rep(snps.ref, rep.vars)
+    snps.alt <- unlist(snps.alt.split)
+    bm.snp <- do.call(rbind, bm.snp)
+    bm.snp$SNP_id <- bm.snp$refsnp_id
+    bm.snp$REF <- snps.ref
+    bm.snp$ALT <- snps.alt
+    ens.genome <- searchDatasets(biomart.dataset, pattern = biomart.dataset@dataset)$version[[1]]
+    ens.genome <- Seqinfo(genome = ens.genome)
+    bm.snp <- with(bm.snp, GRanges(seqnames = chr_name,
+                                   ranges = IRanges(start = chrom_start,
+                                                    end = chrom_end),
+                                   SNP_id = SNP_id,
+                                   REF = DNAStringSet(REF),
+                                   ALT = DNAStringSet(ALT),
+                                   seqinfo = ens.genome))
+    names(bm.snp) <- bm.snp$SNP_id
+    bm.snp <- sort(formatVcfOut(bm.snp, search.genome))
+    return(bm.snp)
+  }
+  if (!inherits(dbSNP, "SNPlocs")) {
+    stop(paste0("dbSNP argument was not provided with a valid SNPlocs object.\n",
+                "Please run availible.SNPs() to check for availible SNPlocs"))
+  }
   rsid.grange <- as(snpsById(dbSNP, rsid, ifnotfound = "warning"), "GRanges")
   rsid.grange <- change.to.search.genome(rsid.grange, search.genome)
   rsid.grange <- GRanges(rsid.grange)
@@ -85,16 +146,26 @@ determine.allele.from.ambiguous <- function(ambiguous.allele, known.allele) {
 }
 
 #' @import GenomeInfoDb
+#' @importFrom stringr str_extract
 change.to.search.genome <- function(granges.object, search.genome) {
-  sequence <- seqlevels(granges.object)
-  ## sequence is in UCSC format and we want NCBI style
-  newStyle <- mapSeqlevels(sequence,seqlevelsStyle(search.genome))
-  newStyle <- newStyle[complete.cases(newStyle)] # removing NA cases.
-  ## rename the seqlevels
-  granges.object <- renameSeqlevels(granges.object,newStyle)
-  seqlevels(granges.object) <- seqlevelsInUse(granges.object)
-  seqinfo(granges.object) <- keepSeqlevels(seqinfo(search.genome),
-                                           value = seqlevelsInUse(granges.object))
+  if (all(!is.na(genome(granges.object)))) {
+    if (identical(genome(granges.object), genome(search.genome))) {
+      return(granges.object)
+    }
+  }
+  if(isTRUE(all.equal(seqlevels(granges.object), seqlevels(search.genome)))) {
+    seqinfo(granges.object) <- seqinfo(search.genome)
+  } else {
+    if(!all(seqlevelsStyle(granges.object) %in% seqlevelsStyle(search.genome))) {
+      seqlevelsStyle(granges.object) <- seqlevelsStyle(search.genome)
+    }
+    normal.xome <- seqlevels(granges.object)[(regexpr("_", seqlevels(granges.object)) < 0)]
+    positions <- unlist(sapply(paste0(normal.xome, "$"), grep, seqnames(seqinfo(search.genome))))
+    new2oldmap <- rep(NA, length(seqinfo(search.genome)))
+    new2oldmap[positions] <- 1:length(positions)
+    seqinfo(granges.object, new2old = new2oldmap) <- seqinfo(search.genome)
+  }
+  granges.object <- keepStandardChromosomes(granges.object, pruning.mode = "coarse")
   return(granges.object)
 }
 
@@ -110,14 +181,14 @@ unlistColumn <- function(x, column = NULL) {
   if (is(mcols(x)[[column]], "DNAStringSet")) {
     mcols(x)[[column]] <- as.character(mcols(x)[[column]])
   }
+  if (is(mcols(x)[[column]], "DNAStringSetList") & all(lengths(mcols(x)[[column]]) == 1)) {
+    mcols(x)[[column]] <- as.character(unlist(mcols(x)[[column]]))
+  }
   if (any(lengths(mcols(x)[[column]]) > 1)) {
     columnvals <- unlist(mcols(x)[[column]])
     numsplits <- lengths(mcols(x)[[column]])
     x <- rep(x, times = numsplits)
     mcols(x)[[column]] <- columnvals
-    return(x)
-  } else if(is(mcols(x)[[column]], "DNAStringSetList")) {
-    mcols(x)[[column]] <- as.character(unlist(mcols(x)[[column]]))
     return(x)
   } else {
     return(x)
@@ -129,10 +200,9 @@ formatVcfOut <- function(x, gseq) {
   mcols(x) <- mcols(x)[, c("SNP_id", "REF", "ALT")]
   x$REF <- unlist(DNAStringSetList(x$REF))
   x$ALT <- unlist(DNAStringSetList(x$ALT))
-  x <- x[!grepl("MT", seqnames(x))]
-  if (!any(grepl("chr", seqlevels(x)))) {
-    seqlevels(x) <- paste0("chr", seqlevels(x))
-  }
+  x <- keepStandardChromosomes(x, pruning.mode = "coarse")
+  seqlevelsStyle(x) <- seqlevelsStyle(gseq)
+  seqlevels(x) <- mapSeqlevels(seqlevels(x), seqlevelsStyle(gseq))
   x <- change.to.search.genome(x, gseq)
   can.ref <- getSeq(gseq, x)
   names(can.ref) <- NULL
@@ -147,6 +217,7 @@ formatVcfOut <- function(x, gseq) {
   attributes(x)$genome.package <- attributes(gseq)$pkgname
   return(x)
 }
+
 #' Import SNPs from a BED file or VCF file for use in motifbreakR
 #'
 #' @param file Character; a character containing the path to a bed file or a vcf file
@@ -192,7 +263,7 @@ formatVcfOut <- function(x, gseq) {
 #' @importFrom SummarizedExperiment rowRanges
 #' @importFrom stringr str_sort str_split
 #' @export
-snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, format = "bed", indels = FALSE, check.unnamed.for.rsid = FALSE) {
+snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, format = "bed", indels = FALSE, biomart.dataset = NULL, check.unnamed.for.rsid = FALSE) {
   if (format == "vcf") {
     if (!inherits(search.genome, "BSgenome")) {
       stop(paste0(search.genome, " is not a BSgenome object.\n", "Run availible.genomes() and choose the appropriate BSgenome object"))
@@ -248,7 +319,7 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
   } else {
     if (format == "bed") {
       snps <- import(file, format = "bed")
-      if (any(grepl("rs", snps$name)) & (!inherits(dbSNP, "SNPlocs"))) {
+      if (any(grepl("rs", snps$name)) & !((!inherits(dbSNP, "SNPlocs")) | (!inherits(biomart.dataset, "Mart")))) {
         stop(paste0(file, " contains at least one variant with an rsID and no SNPlocs has been indicated\n",
                     "Please run availible.SNPs() to check for availble SNPlocs"))
       }
@@ -343,21 +414,17 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
         }
       }
       snps.noid <- formatVcfOut(snps.noid, search.genome)
-      # if (!indels) {
       ## get object for named snps
       if (length(snps.rsid) > 0) {
-        snps.rsid.out <- snps.from.rsid(snps.rsid$name, dbSNP = dbSNP, search.genome = search.genome)
+        snps.rsid.out <- snps.from.rsid(snps.rsid$name, dbSNP = dbSNP, search.genome = search.genome, biomart.dataset = biomart.dataset)
         colnames(mcols(snps.rsid.out))[1] <- "SNP_id"
         names(snps.rsid.out) <- snps.rsid.out$SNP_id
         snps.out <- c(snps.rsid.out, snps.noid)
       } else {
         snps.out <- snps.noid
       }
-      # } else {
-      # snps.out <- snps.noid
-      # }
       attributes(snps.out)$genome.package <- attributes(search.genome)$pkgname
-      return(snps.out)
+      return(sort(snps.out))
     } else {
       stop("format must be one of 'vcf' or 'bed'; currently set as ", format)
     }
@@ -366,6 +433,6 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
 
 #' @describeIn snps.from.file Allows the use of indels by default
 #' @export
-variants.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, format = "bed") {
-  return(snps.from.file(file = file, dbSNP = dbSNP, search.genome = search.genome, format = format, indels = TRUE))
+variants.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, biomart.dataset = NULL, format = "bed") {
+  return(snps.from.file(file = file, dbSNP = dbSNP, search.genome = search.genome, format = format, biomart.dataset = biomart.dataset, indels = TRUE))
 }

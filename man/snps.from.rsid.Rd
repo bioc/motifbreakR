@@ -4,7 +4,12 @@
 \alias{snps.from.rsid}
 \title{Import SNPs from rsid for use in motifbreakR}
 \usage{
-snps.from.rsid(rsid = NULL, dbSNP = NULL, search.genome = NULL)
+snps.from.rsid(
+  rsid = NULL,
+  dbSNP = NULL,
+  search.genome = NULL,
+  biomart.dataset = NULL
+)
 }
 \arguments{
 \item{rsid}{Character; a character vector of rsid values from dbSNP}
@@ -13,7 +18,13 @@ snps.from.rsid(rsid = NULL, dbSNP = NULL, search.genome = NULL)
 \code{\link[BSgenome]{injectSNPs}} to check for availible SNPlocs}
 
 \item{search.genome}{an object of class BSgenome for the species you are interrogating;
-see \code{\link[BSgenome]{available.genomes}} for a list of species}
+see \code{\link[BSgenome]{available.genomes}} for a list of species.}
+
+\item{biomart.dataset}{a Mart object from \code{\link{useEnsembl}} specifying
+the \code{snps} biomart, which dataset i.e., \code{hsapiens_snp}, and which
+version i.e., \code{111} or \code{GRCm39}. This wilSNP and must
+be compatible with search.genome selections, and rather query from biomaRt,
+which may be considerably faster than a lookup from a SNPlocs object.}
 }
 \value{
 a GRanges object containing:
@@ -38,6 +49,17 @@ Import SNPs from rsid for use in motifbreakR
  snps.mb <- snps.from.rsid(snps[1],
                            dbSNP = SNPlocs.Hsapiens.dbSNP155.GRCh37,
                            search.genome = BSgenome.Hsapiens.UCSC.hg19)
+
+ ## alternatively using biomaRt
+
+ library(biomaRt)
+ library(BSgenome.Hsapiens.UCSC.hg19)
+ ensembl_snp <- useEnsembl(biomart = "snps",
+                           dataset = "hsapiens_snp",
+                           version = "112")
+ snps.mb <- snps.from.rsid(snps,
+                           biomart.dataset = ensembl_snp,
+                           search.genome = BSgenome.Hsapiens.UCSC.hg38)
 
 }
 \seealso{

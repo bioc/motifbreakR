@@ -33,7 +33,9 @@ evaluation.}
 \value{
 a GRanges object. The same Granges object that was input as \code{results}, but with
  \code{Refpvalue} and \code{Altpvalue} columns in the output modified from \code{NA} to the p-value
- calculated by \code{\link{TFMsc2pv}}.
+ calculated by \code{\link{TFMsc2pv}}. Additionally a \code{pvalueEffect} column that indicates "strong"
+ when the lower p-value (between ref and alt) is an order of magnitude or more different from
+ the higher p-value, otherwise weak.
 }
 \description{
 Calculate the significance of the matches for the reference and alternate alleles for the for their PWM

@@ -8,13 +8,6 @@
 ## define utility functions 'defaultOmega' (and related fxns) and maxPwm and
 ## minPwm
 
-## reverse complement any string letter DNA
-
-revcom <- function(ltr) {
-  rclist <- list(A = "T", C = "G", G = "C", T = "A")
-  rclist[[ltr]]
-}
-
 prepareVariants <- function(fsnplist, genome.bsgenome, max.pwm.width) {
   k <- max.pwm.width; rm(max.pwm.width)
   ref_len <- nchar(fsnplist$REF)
@@ -23,7 +16,7 @@ prepareVariants <- function(fsnplist, genome.bsgenome, max.pwm.width) {
   ## check that reference matches ref genome
   equals.ref <- getSeq(genome.bsgenome, fsnplist) == fsnplist$REF
   if (!all(equals.ref)) {
-    stop(paste(names(fsnplist[!equals.ref]), "reference allele does not match value in reference genome",
+    stop(paste(names(fsnplist[!equals.ref]), "reference allele does not match value in reference genome. ",
                sep = " "))
   }
   if (sum(is.indel) < length(is.indel) & sum(is.indel) > 0L) {
@@ -47,6 +40,7 @@ prepareVariants <- function(fsnplist, genome.bsgenome, max.pwm.width) {
 
     need.alignment <- !(lengths(fsnplist.indel$REF) == 1 | lengths(fsnplist.indel$ALT) == 1)
     insertion.var <- lengths(fsnplist.indel$REF) < lengths(fsnplist.indel$ALT)
+    other.var <- lengths(fsnplist.indel$REF) == lengths(fsnplist.indel$ALT)
     fsnplist.indel$ALT_loc <- 1L
     fsnplist.indel[insertion.var]$ALT_loc <- Map(seq,
                                                  from = nchar(fsnplist.indel[insertion.var]$REF) + 1L,
@@ -63,6 +57,9 @@ prepareVariants <- function(fsnplist, genome.bsgenome, max.pwm.width) {
     fsnplist.indel$varType <- "Other"
     if (sum(insertion.var) > 0) {
       fsnplist.indel[insertion.var, ]$varType <- "Insertion"
+    }
+    if (sum(other.var) > 0){
+      need.alignment[other.var] <- FALSE
     }
     if (sum(lengths(fsnplist.indel$REF) > lengths(fsnplist.indel$ALT)) > 0) {
       fsnplist.indel[lengths(fsnplist.indel$REF) > lengths(fsnplist.indel$ALT)]$varType <- "Deletion"
@@ -180,23 +177,8 @@ prepareVariants <- function(fsnplist, genome.bsgenome, max.pwm.width) {
 
 ## An evaluator function for SNP effect
 
- varEff <- function(allelR, allelA) {
+varEff <- function(allelR, allelA) {
   score <- allelA - allelR
-  if (abs(score) >= 0.7) {
-    return(list(score = score, effect = "strong"))
-  } else if (abs(score) > 0.4) {
-    return(list(score = score, effect = "weak"))
-  } else {
-    return(list(score = score, effect = "neut"))
-  }
-}
-
-scoreIndel <- function(pwm,
-                       ref.seq, alt.seq,
-                       hit.ref, hit.alt) {
-  ref.windows <- scoreSeqWindows(ppm = pwm, seq = ref.seq)
-  alt.windows <- scoreSeqWindows(ppm = pwm, seq = alt.seq)
-  score <- alt.windows[hit.alt$strand, hit.alt$window] - ref.windows[hit.ref$strand, hit.ref$window]
   if (abs(score) >= 0.7) {
     return(list(score = score, effect = "strong"))
   } else if (abs(score) > 0.4) {
@@ -254,14 +236,14 @@ maxThresholdWindows <- function(window.frame) {
 #' @import S4Vectors
 #' @import BiocGenerics
 #' @import IRanges
-#' @importFrom Biostrings getSeq replaceLetterAt reverseComplement complement replaceAt pairwiseAlignment insertion deletion matchPattern
+#' @importFrom Biostrings getSeq replaceLetterAt reverseComplement complement replaceAt matchPattern
+#' @importFrom pwalign pairwiseAlignment insertion deletion
 #' @importFrom TFMPvalue TFMpv2sc
 #' @importFrom stringr str_locate_all str_sub
 scoreSnpList <- function(fsnplist, pwmList, method = "default", bkg = NULL,
                          threshold = 1e-3, show.neutral = FALSE, verbose = FALSE,
                          genome.bsgenome=NULL, pwmList.pc = NULL, pwmRanges = NULL, filterp=TRUE) {
   k <- max(sapply(pwmList, ncol))
-
   snp.sequence.alt <- fsnplist$alt.seq
   snp.sequence.ref <- fsnplist$ref.seq
   fsnplist <- fsnplist$fsnplist
@@ -289,15 +271,9 @@ scoreSnpList <- function(fsnplist, pwmList, method = "default", bkg = NULL,
       res.el$Refpvalue <- as.numeric(NA)
       res.el$Altpvalue <- as.numeric(NA)
     }
-    if (ref.len > 1 | alt.len > 1) {
-      res.el$altPos <- as.numeric(NA)
-      res.el$alleleDiff <- as.numeric(NA)
-      res.el$alleleEffectSize <- as.numeric(NA)
-    } else {
-      res.el$snpPos <- as.integer(NA)
-      res.el$alleleRef <- as.numeric(NA)
-      res.el$alleleAlt <- as.numeric(NA)
-    }
+    res.el$altPos <- as.numeric(NA)
+    res.el$alleleDiff <- as.numeric(NA)
+    res.el$alleleEffectSize <- as.numeric(NA)
     res.el$effect <- as.character(NA)
     for (pwm.i in seq_along(pwmList)) {
       pwm.basic <- pwmList[[pwm.i]]
@@ -341,41 +317,21 @@ scoreSnpList <- function(fsnplist, pwmList, method = "default", bkg = NULL,
       if (!is.null(hit)) {
         result <- res.el[pwm.i]
         uniquename <- paste(names(result), result$dataSource, result$providerName, result$providerId, sep = "%%")
-        if (nchar(result$REF) > 1 | nchar(result$ALT) > 1) {
-          allelR <- ref.windows[hit.ref$strand, hit.ref$window]
-          allelA <- alt.windows[hit.alt$strand, hit.alt$window]
-          scorediff <- varEff(allelR, allelA)
-          effect <- scorediff$effect
-          score <- scorediff$score
-          #ref.pos <- ref.range[(ncol(pwm) - (seq.start - 1)):((ncol(pwm) + ref.len - seq.start))]
-          ref.pos <- k:(k + nchar(result$REF) - 1L)
-          #alt.pos <- alt.range[(ncol(pwm) - (seq.start - 1)):((ncol(pwm) + alt.len - seq.start))]
-          alt.pos <- k:(k + nchar(result$ALT) - 1L)
-          if ((effect == "neut" & show.neutral) | effect != "neut") {
-            res.el.e[[uniquename]] <- updateResultsIndel(result,
-                                                         snp.ref, snp.alt,
-                                                         ref.pos, alt.pos,
-                                                         hit.ref, hit.alt,
-                                                         ref.windows, alt.windows,
-                                                         score, effect, len,
-                                                         k, pwm, calcp = filterp)
-          }
-        } else {
-          snp.pos <- k:(k + nchar(result$REF) - 1L)
-          allelR <- ref.windows[hit.ref$strand, hit.ref$window]
-          allelA <- alt.windows[hit.alt$strand, hit.alt$window]
-          scorediff <- varEff(allelR, allelA)
-          effect <- scorediff$effect
-          score <- scorediff$score
-          if ((effect == "neut" & show.neutral) | effect != "neut") {
-            res.el.e[[uniquename]] <- updateResultsIndel(result,
-                                                         snp.ref, snp.alt,
-                                                         snp.pos, snp.pos,
-                                                         hit.ref, hit.alt,
-                                                         ref.windows, alt.windows,
-                                                         score, effect, len,
-                                                         k, pwm, calcp = filterp)
-          }
+        allelR <- ref.windows[hit.ref$strand, hit.ref$window]
+        allelA <- alt.windows[hit.alt$strand, hit.alt$window]
+        scorediff <- varEff(allelR, allelA)
+        effect <- scorediff$effect
+        score <- scorediff$score
+        ref.pos <- k:(k + nchar(result$REF) - 1L)
+        alt.pos <- k:(k + nchar(result$ALT) - 1L)
+        if ((effect == "neut" & show.neutral) | effect != "neut") {
+          res.el.e[[uniquename]] <- updateResultsIndel(result,
+                                                       snp.ref, snp.alt,
+                                                       ref.pos, alt.pos,
+                                                       hit.ref, hit.alt,
+                                                       ref.windows, alt.windows,
+                                                       score, effect, len,
+                                                       k, pwm, calcp = filterp)
         }
       }
     }
@@ -407,41 +363,6 @@ scoreSnpList <- function(fsnplist, pwmList, method = "default", bkg = NULL,
 #' @importFrom matrixStats colRanges
 #' @importFrom stringr str_pad
 #' @importFrom TFMPvalue TFMsc2pv
-updateResultsSnv <- function(result, snp.seq, snp.pos, hit, ref.windows, alt.windows,
-                             allelR, allelA, effect, len, k, pwm, calcp) {
-  strand.opt <- c("+", "-")
-  strand(result) <- strand.opt[[hit$strand]]
-  hit$window <- as.integer(hit$window)
-  mresult <- mcols(result)
-  mresult[["snpPos"]] <- start(result)
-  mresult[["motifPos"]] <- as.integer(snp.pos)
-  matchs <- snp.seq
-  seq.pos <- snp.pos + hit$window - 1
-  matchs[-(seq.pos)] <- tolower(matchs[-(seq.pos)])
-  matchs <- paste(matchs, collapse = "")
-  mresult[["seqMatch"]] <- str_pad(matchs, width = k * 2, side = "both")
-  start(result) <- start(result) - snp.pos + 1
-  end(result) <- end(result) - snp.pos + len
-  if (calcp) {
-    mresult[["scoreRef"]] <- ref.windows[hit$strand, hit$window]
-    mresult[["scoreAlt"]] <- alt.windows[hit$strand, hit$window]
-    mresult[["Refpvalue"]] <- NA
-    mresult[["Altpvalue"]] <- NA
-    pwmrange <- colSums(colRanges(pwm))
-    mresult[["pctRef"]] <- (mresult[["scoreRef"]] - pwmrange[[1]]) / (pwmrange[[2]] - pwmrange[[1]])
-    mresult[["pctAlt"]] <- (mresult[["scoreAlt"]] - pwmrange[[1]]) / (pwmrange[[2]] - pwmrange[[1]])
-  } else {
-    mresult[["pctRef"]] <- ref.windows[hit$strand, hit$window]
-    mresult[["pctAlt"]] <- alt.windows[hit$strand, hit$window]
-  }
-  mresult[["alleleRef"]] <- allelR
-  mresult[["alleleAlt"]] <- allelA
-  mresult[["effect"]] <- effect
-  mcols(result) <- mresult
-  return(result)
-}
-
-
 updateResultsIndel <- function(result,
                                ref.seq, alt.seq,
                                ref.pos, alt.pos,
@@ -508,8 +429,8 @@ preparePWM <- function(pwmList,
                        method = "default") {
 
   bkg <- bkg[c('A', 'C', 'G', 'T')]
-
   scounts <- as.integer(mcols(pwmList)$sequenceCount)
+  mCGMAT <- pwmList@manuallyCuratedGeneMotifAssociationTable
   scounts[is.na(scounts)] <- 20L
   pwmList.pc <- Map(function(pwm, scount) {
     pwm <- (pwm * scount + 0.25)/(scount + 1)
@@ -719,8 +640,6 @@ preparePWM <- function(pwmList,
 #'  \item{scoreAlt}{The score as determined by the scoring method, when the sequence contains the alternate variant allele}
 #'  \item{Refpvalue}{p-value for the match for the pctRef score, initially set to \code{NA}. see \code{\link{calculatePvalue}} for more information}
 #'  \item{Altpvalue}{p-value for the match for the pctAlt score, initially set to \code{NA}. see \code{\link{calculatePvalue}} for more information}
-#'  \item{alleleRef}{The proportional frequency of the reference allele at position \code{motifPos} in the motif}
-#'  \item{alleleAlt}{The proportional frequency of the alternate allele at position \code{motifPos} in the motif}
 #'  \item{altPos}{the position, relative to the reference allele, of the alternate allele}
 #'  \item{alleleDiff}{The difference between the score on the reference allele and the score on the alternate allele}
 #'  \item{alleleEffectSize}{The ratio of the \code{alleleDiff} and the maximal score of a sequence under the PWM}
@@ -870,7 +789,9 @@ motifbreakR <- function(snpList, pwmList, threshold = 0.85, filterp = FALSE,
 #'   evaluation.
 #' @return a GRanges object. The same Granges object that was input as \code{results}, but with
 #'  \code{Refpvalue} and \code{Altpvalue} columns in the output modified from \code{NA} to the p-value
-#'  calculated by \code{\link{TFMsc2pv}}.
+#'  calculated by \code{\link{TFMsc2pv}}. Additionally a \code{pvalueEffect} column that indicates "strong"
+#'  when the lower p-value (between ref and alt) is an order of magnitude or more different from
+#'  the higher p-value, otherwise weak.
 #' @seealso See \code{\link{TFMsc2pv}} from the \pkg{TFMPvalue} package for
 #'   information about how the p-values are calculated.
 #' @details This function is intended to be used on a selection of results produced by \code{\link{motifbreakR}}, and
@@ -906,7 +827,7 @@ calculatePvalue <- function(results,
     cl <- bpbackend(BPPARAM)
     clusterEvalQ(cl, library("MotifDb"))
   }
-  if(!("scoreRef" %in% names(mcols(results)))) {
+  if(!("Refpvalue" %in% names(mcols(results)))) {
     stop('incorrect results format; please rerun analysis with filterp=TRUE')
   } else {
     pwmListmeta <- mcols(attributes(results)$motifs, use.names=TRUE)
@@ -936,6 +857,8 @@ calculatePvalue <- function(results,
     pvalues.df <- base::do.call("rbind", c(pvalues, make.row.names = FALSE))
     results$Refpvalue <- pvalues.df[, "ref"]
     results$Altpvalue <- pvalues.df[, "alt"]
+    pscore <- with(results, ifelse(Refpvalue < Altpvalue, Altpvalue/Refpvalue, Refpvalue/Altpvalue))
+    results$pvalueEffect <- ifelse(pscore > 10, "strong", "weak")
 
     if (is(BPPARAM, "SnowParam")) {
       bpstop(BPPARAM)
@@ -991,10 +914,7 @@ plotMotifLogoStack.3 <- function(pfms, ...) {
 DNAmotifAlignment.2snp <- function(pwms, result) {
   from <- min(sapply(result$motifPos, `[`, 1))
   to <- max(sapply(result$motifPos, `[`, 2))
-#  pos <- mcols(result)$motifPos
-#  pos <- pos[as.logical(strand(result) == "+")][1]
   for (pwm.i in seq_along(pwms)) {
-    #pwm <- pwms[[pwm.i]]@mat
     ## get pwm info from result data
     pwm.name <- pwms[[pwm.i]]@name
     pwm.name <- str_replace(pwm.name, pattern = "-:rc$", replacement = "")
@@ -1203,8 +1123,6 @@ plotMB <- function(results, rsid, reverseMotif = TRUE, effect = c("strong", "wea
                            fontcolor = c(colorset("DNA", "auto"), N = "#FFFFFF", . = "#FFE3E6"),
                            chromosome = chromosome)
 
-  #altseq <- replaceLetterAt(altseq, at = wherereplace, letter = rep.int("N", sum(wherereplace)))
-  #altseq <- replaceLetterAt(altseq, at = !wherereplace, letter = result$ALT[[1]])
   histart <- start(result[1]) + min(result[1]$altPos[[1]]) - 2
   histart <- ifelse(result[1]$varType %in% c("Other", "SNV"), histart + 1, histart)
   hiend <- start(result[1]) + min(result[1]$altPos[[1]]) - 2 + length(result[1]$altPos[[1]])
@@ -1275,7 +1193,7 @@ plotMB <- function(results, rsid, reverseMotif = TRUE, effect = c("strong", "wea
   }
   plotTracks(track_list, from = from, to = to, showBandId = TRUE,
              cex.main = 0.8, col.main = "darkgrey",
-             add53 = TRUE, labelpos = "below", chromosome = chromosome, #groupAnnotation = "id",
+             add53 = TRUE, labelpos = "below", chromosome = chromosome,
              fontcolor.item="black",
              collapse = FALSE, min.width = 1, featureAnnotation = "feature", cex.feature = 0.8,
              details.size = 0.85, detailsConnector.pch = NA, detailsConnector.lty = 0,
@@ -1283,81 +1201,227 @@ plotMB <- function(results, rsid, reverseMotif = TRUE, effect = c("strong", "wea
   return(invisible(NULL))
 }
 
+#' Run Shiny version of the motifbreakR package.
+#' @return returns a \code{\link{shinyAppDir}} that launches the shiny app when printed.
+#' @examples
+#' library(motifbreakR)
+#'
+#' app <- shiny_motifbreakR()
+#'
+#' if (interactive()) {
+#'   shiny::runApp(app)
+#' }
+#' @import shiny bslib bsicons
+#' @importFrom DT renderDT DTOutput datatable formatRound JS
+#' @importFrom BSgenome available.genomes
+#' @export
+shiny_motifbreakR <- function() {
+  appDir <- system.file("shiny", "shiny_motif", package = "motifbreakR")
+  if (appDir == "") {
+    stop("Could not find example directory. Try re-installing `mypackage`.", call. = FALSE)
+  }
+  shinyAppDir(appDir)
+}
+
 #' Export motifbreakR results to csv or tsv
 #'
 #' @param results The output of \code{motifbreakR}
 #' @param file Character; the file name of the destination file
 #' @param format Character; one of tsv (tab separated values) or csv (comma separated values)
-#' @return \code{exportMBresults} produces an output file containing the output
-#' of the motifbreakR function.
+#' @return \code{exportMBtable} produces an output file containing the output
+#' of the \code{motifbreakR} function.
+#' @seealso See \code{\link{exportMBbed}} for the function that exports the
+#' \code{motifbreakR} results as a BED file, colored by selected score.
 #' @examples
 #' data(example.results)
 #' example.results
 #' \donttest{
-#' exportMBresults(example.results, file = "output.tsv", format = "tsv")
+#' exportMBtable(example.results, file = "mb_test_output.tsv", format = "tsv")
 #' }
 #' @export
-exportMBresults <- function(results, file, format = c("tsv")) {
+exportMBtable <- function(results, file, format = "tsv") {
   if(missing(file)) {stop("select output file location")}
-  if(!(format %in% c("csv", "tsv"))) {stop("format must be one of csv or tsv")}
+  format <- match.arg(format, c("csv", "tsv"))
   sep <- switch(format,
                 csv = ",",
                 tsv = "\t")
-  names(results) <- NULL
-  results <- as.data.frame(results)
+  results <- as.data.frame(results, row.names = NULL)
   results <- results[, !colnames(results) %in% "width"]
   results$start <- results$start - 1
   results$motifPos <- vapply(results$motifPos, function(x) { paste0(x[1], ";", x[2]) }, FUN.VALUE = character(1))
+  results$matchingBindingEvent <- vapply(results$matchingCellType, function(x) {
+    collapsed_data <- lapply(x, function(y) {
+      paste0(y, collapse = "; ")})
+    collapsed_data <- paste0(names(collapsed_data), ":(", collapsed_data, ")")
+    collapsed_data <- paste(collapsed_data, collapse = "; ")
+    ifelse(collapsed_data == ":(NA)", NA_character_, collapsed_data)
+  }, FUN.VALUE = character(1))
+  results$matchingCellType <- NULL
   if(format == "tsv") {
-    write.table(x = results, file = file, quote = FALSE, sep = sep, row.names = FALSE, col.names = TRUE)
+    write.table(x = results, file = file, quote = FALSE, sep = sep, row.names = FALSE)
   } else {
-    write.csv(x = results, file = file, row.names = FALSE, col.names = TRUE)
+    write.csv(x = results, file = file, row.names = FALSE)
   }
+}
+
+get_color_values <- function(bed_score, color_set) {
+  color_values <- quantile(bed_score, probs = seq(0,1,length.out = 9))
+  cut_scores <- cut(bed_score, color_values, include.lowest = TRUE)
+  cut_points <- levels(cut_scores)
+  bed_colors <- factor(cut_scores,
+                       labels = color_set)
+  color_scale <- levels(bed_colors)
+  names(color_scale) <- cut_points
+  return(list(bed_colors = bed_colors, color_scale = color_scale))
+}
+
+#' Export motifbreakR variants to bed file
+#'
+#' @param results The output of \code{\link{motifbreakR}}
+#' @param file Character; the file name of the destination file
+#' @param color Character; one of ref_sig (\code{Refpvalue}), alt_sig
+#' (\code{Altpvalue}), best_sig (lowest between \code{Refpvalue} and
+#' \code{Altpvalue}), (each of which require pre-computation of p-values with
+#' \code{\link{calculatePvalue}}), or ref_score (\code{pctRef}), alt_score
+#' (\code{pctAlt}), best_score (highest between \code{pctRef} and \code{pctAlt}),
+#' or the default value of effect_size (\code{alleleDiff}).
+#' @return \code{exportMBbed} produces an output BED file, with diverging color
+#' scale for effect_size (blue representing stronger binding in \code{REF}, red
+#' representing stronger binding in \code{ALT}), or a sequential color scale
+#' otherwise (low values as purple, high values as yellow). The score column is
+#' either the effect_size (\code{alleleDiff} column), the -log10(p-value)
+#' (capped at 10), corresponding to \code{Refpvalue}, \code{Altpvalue}, or the
+#' best match of the two, or the score \code{pctRef}, \code{pctAlt}, or the
+#' highest match of the two. The name column is formatted
+#' \code{SNP_id:REF/ALT:providerId}. Additionally a color key is returned
+#' indicating the range of values for each color output.
+#' @seealso See \code{\link{exportMBtable}} for the function that exports the
+#' full \code{motifbreakR} results as a tab or comma separated table file.
+#' @examples
+#' data(example.results)
+#' example.results
+#' \donttest{
+#' exportMBbed(example.results, file = "mb_test_output.bed", color = "effect_size")
+#' }
+#' @export
+exportMBbed <- function(results, file, name = NULL, color = "effect_size") {
+  if(missing(file)) {stop("select output file location")}
+  color <- match.arg(color, c("ref_sig", "alt_sig", "best_sig",
+                              "ref_score", "alt_score", "best_score",
+                              "effect_size"))
+  sequential_colors <- c("#440154",
+                         "#46337E",
+                         "#365C8D",
+                         "#277F8E",
+                         "#1FA187",
+                         "#4AC16D",
+                         "#9FDA3A",
+                         "#FDE725")
+  diverging_colors <- c("#001260",
+                        "#034A85",
+                        "#4A8FB2",
+                        "#BDD6E3",
+                        "#E7C6B2",
+                        "#C98157",
+                        "#9D3709",
+                        "#590007")
+  bed_name <- paste(results$SNP_id, paste(results$REF, results$ALT, sep = "/"), sep = ":")
+  bed_name <- paste(bed_name, results$providerId, sep = ":")
+  results_bed <- results
+  mcols(results_bed) <- NULL
+  results_bed$name <- bed_name
+
+  if(color == "effect_size") {
+    bed_score <- results$alleleDiff
+    color_values <- get_color_values(bed_score, diverging_colors)
+  } else {
+    if(color %in% c("ref_sig", "alt_sig", "best_sig")) {
+      if(!("Refpvalue" %in% names(mcols(results))))
+        stop('incorrect results format; please rerun analysis with filterp=TRUE')
+      if(any(is.na(results$Refpvalue)))
+        stop('run computePvalue before exporting data with p-values')
+    }
+    bed_score <- switch(color,
+                        ref_sig = -log10(results$Refpvalue),
+                        alt_sig = -log10(results$Altpvalue),
+                        best_sig = ifelse(results$pctRef < results$pctAlt,
+                                          -log10(results$Refpvalue),
+                                          -log10(results$Altpvalue)),
+                        ref_score = results$pctRef,
+                        alt_score = results$pctAlt,
+                        best_score = ifelse(results$pctAlt < results$pctRef,
+                                            results$pctRef,
+                                            results$pctAlt))
+    color_values <- get_color_values(bed_score, sequential_colors)
+  }
+  results_bed$score <- bed_score
+  results_bed$itemRgb <- color_values$bed_colors
+  motif_sources <- levels(factor(results$dataSource))
+  data_source <- unique(genome(results))
+  results_trackline <- new("BasicTrackLine",
+                           itemRgb = TRUE,
+                           useScore = TRUE,
+                           visibility = "pack",
+                           name = ifelse(is.null(name), "motifbreakR results", name),
+                           description = paste0("motifbreakR results colored by ", color, " in ",
+                                                paste0(data_source, collapse = ", "),
+                                                " from motif sources: ",
+                                                paste0(motif_sources, collapse = ", ")))
+  export.bed(results_bed, con = file, trackLine = results_trackline)
+  return(color_values$color_scale)
 }
 
 #' Find Corresponding TF Binding From The ReMap2022 Project
 #'
-#' @param remap_data Character; either the path to a local copy of the non-redundant
-#'   peak set, or one of \code{hg38} for Homo sapiens, \code{mm10} for Mus musculus,
-#'   \code{dm6} for Drosophila melanogaster, or \code{TAIR10} for Arabidopsis thaliana,
-#'   to be queried (slowly) online.
-#' @details \code{snps.from.file} takes a character vector describing the file path
-#'  to a bed file that contains the necissary information to generate the input for
-#'  \code{motifbreakR} see \url{http://www.genome.ucsc.edu/FAQ/FAQformat.html#format1}
-#'  for a complete description of the BED format.  Our convention deviates in that there
-#'  is a required format for the name field.  \code{name} is defined as chromosome:start:REF:ALT
-#'  or the rsid from dbSNP (if you've included the optional SNPlocs argument).
-#'  For example if you were to include rs123 in it's alternate
-#'  format it would be entered as chr7:24966446:C:A
-#' @return a GRanges object containing:
-#'  \item{SNP_id}{The rsid of the snp with the "rs" portion stripped}
-#'  \item{alleles_as_ambig}{THE IUPAC ambiguity code between the reference and
-#'  alternate allele for this SNP}
-#'  \item{REF}{The reference allele for the SNP}
-#'  \item{ALT}{The alternate allele for the SNP}
-#' @examples
-#'  library(BSgenome.Drerio.UCSC.danRer7)
+#' @param results The output of \code{motifbreakR}
+#' @param genome Character; one of:
+#' \code{hg38} or \code{hg19} for Homo sapiens,
+#' \code{mm10} or \code{mm39} for Mus musculus,
+#' \code{dm6} for Drosophila melanogaster,
+#' \code{TAIR10_TF} or \code{TAIR10_HISTONE} for Arabidopsis thaliana
+#' @param TFClass Logical;  The user may optionally query an expanded
+#' motif/transcription factor relationship encompassing the entire potential
+#' transcription factor family as implemented by \code{\link{MotifDb}} based on
+#' TFClass.
+#' @details \code{TFClass} argument works for objects loaded in from the
+#' \code{MotifDb} package. \code{hg19} and \code{mm39} are data from liftOver.
 #'
-#' @importFrom rtracklayer import
-#' @importFrom Biostrings IUPAC_CODE_MAP uniqueLetters BStringSetList DNA_ALPHABET
-#' @importFrom VariantAnnotation readVcf ref alt isSNV VcfFile ScanVcfParam
-#' @importFrom SummarizedExperiment rowRanges
-#' @importFrom stringr str_sort str_split
+#' @seealso \code{\link{associateTranscriptionFactors}} for information about
+#' TFClass. \url{https://remap.univ-amu.fr/} for details about ReMap2022.
+#' @return the results GenomicRanges object output by \code{\link{motifbreakR}}
+#' containing with the additional columns:
+#'  \item{matchingBindingEvent}{The name of the transcription factor that binds
+#'  over the motif, or \code{NA} if none}
+#'  \item{matchingCellType}{A list corresponding in length to the number of
+#'  transcription factors in \code{matchingBindingEvent} indicating the
+#'  biotype/celltype that the transcription factor binding was found in.}
+#' @examples
+#' data(example.results)
+#' \donttest{
+#' example.results <- findSupportingRemapPeaks(example.results,
+#'                                             genome = "hg19",
+#'                                             TFClass = TRUE)
+#' }
 #' @export
 
-findSupportingRemapPeaks <- function(results, genome) {
-  genome <- match.arg(genome, c("hg38", "mm10", "dm6", "TAIR10_TF", "TAIR10_HISTONE"))
+findSupportingRemapPeaks <- function(results, genome, TFClass = FALSE) {
+  genome <- match.arg(genome, c("hg38", "hg19", "mm10", "mm39", "dm6", "TAIR10_TF", "TAIR10_HISTONE"))
+  switch(genome,
+         hg19 = message("hg19 peaks have been lifted over from hg38"),
+         mm39 = message("mm39 peaks have been lifted over from mm10"))
 
   remap_links <- list(
     hg38      = "https://remap.univ-amu.fr/storage/remap2022/hg38/MACS2/remap2022_nr_macs2_hg38_v1_0.bed.gz",
+    hg19      = "https://remap.univ-amu.fr/storage/remap2022/hg19/MACS2/remap2022_nr_macs2_hg19_v1_0.bed.gz",
     mm10      = "https://remap.univ-amu.fr/storage/remap2022/mm10/MACS2/remap2022_nr_macs2_mm10_v1_0.bed.gz",
+    mm39      = "https://remap.univ-amu.fr/storage/remap2022/mm39/MACS2/remap2022_nr_macs2_mm39_v1_0.bed.gz",
     dm6       = "https://remap.univ-amu.fr/storage/remap2022/dm6/MACS2/remap2022_nr_macs2_dm6_v1_0.bed.gz",
     TAIR10_TF = "https://remap.univ-amu.fr/storage/remap2022/tair10/tf/MACS2/remap2022_nr_macs2_TAIR10_v1_0.bed.gz",
     TAIR10_HISTONE = "https://remap.univ-amu.fr/storage/remap2022/tair10/histones/MACS2/remap2022_histone_nr_macs2_TAIR10_v1_0.bed.gz"
   )
 
   results$matchingBindingEvent <- NA
-  results$matchingCelltype <- NA
+  results$matchingCellType <- NA
 
   uniqmb <- results
   mcols(uniqmb) <- NULL
@@ -1377,7 +1441,9 @@ findSupportingRemapPeaks <- function(results, genome) {
   variant_to_peak$tf.celltype <- lapply(variant_to_peak$tf.celltype, function(x) {stringr::str_split(x, ",", simplify = T)[1, ]})
   mcol_variant_to_gene <- data.frame(variant = names(results), tf.gene = results$geneSymbol, motif = results$providerId)
 
-  if("manuallyCuratedGeneMotifAssociationTable" %in% slotNames(attributes(results)$motifs)) {
+  if(("manuallyCuratedGeneMotifAssociationTable" %in% slotNames(attributes(results)$motifs)) &
+      TFClass &
+      (nrow(attributes(results)$motifs@manuallyCuratedGeneMotifAssociationTable) > 1)) {
     mb_genelist <- attributes(results)$motifs@manuallyCuratedGeneMotifAssociationTable
     mb_genelist <- unique(mb_genelist[mb_genelist$motif %in% results$providerId, c("motif", "tf.gene")])
     mb_genelist_aug <- unique(data.frame(motif = results$providerId, tf.gene = results$geneSymbol))
@@ -1400,7 +1466,7 @@ findSupportingRemapPeaks <- function(results, genome) {
     pvariant <- names(split_vmbp[variant])
     vgm <- split_vmbp[[variant]]
     mbv_sel <- which(mcol_variant_to_gene$variant == pvariant)
-    vgm$motif <- factor(vgm$motif, levels = mcol_variant_to_gene[mbv_sel, "motif"])
+    vgm$motif <- factor(vgm$motif, levels = unique(mcol_variant_to_gene[mbv_sel, "motif"]))
     names(vgm$tf.celltype) <- vgm$tf.binding
     vgmm <- vgm[which(vgm$motif %in% mcol_variant_to_gene$motif), ]
     vgmm <- split(vgmm, vgmm$motif)
@@ -1409,10 +1475,10 @@ findSupportingRemapPeaks <- function(results, genome) {
     vgm <- mapply(rbind, vgmm, vgmg, SIMPLIFY = F)
 
     results[mbv_sel]$matchingBindingEvent <- lapply(vgm, function(x) {unique(x$tf.binding)})[results[mbv_sel]$providerId]
-    results[mbv_sel]$matchingCelltype <- lapply(vgm, function(x) {x$tf.celltype})[results[mbv_sel]$providerId]
+    results[mbv_sel]$matchingCellType <- lapply(vgm, function(x) {x$tf.celltype})[results[mbv_sel]$providerId]
     if(any(lengths(results[mbv_sel]$matchingBindingEvent) == 0)) {
       results[mbv_sel][lengths(results[mbv_sel]$matchingBindingEvent) == 0]$matchingBindingEvent <- NA
-      results[mbv_sel][lengths(results[mbv_sel]$matchingCelltype) == 0]$matchingCelltype <- NA
+      results[mbv_sel][lengths(results[mbv_sel]$matchingCellType) == 0]$matchingCellType <- NA
     }
   }
   attributes(results)$peaks <- remap_binding
@@ -1422,14 +1488,15 @@ findSupportingRemapPeaks <- function(results, genome) {
 #' @importFrom tools R_user_dir
 #' @importFrom BiocFileCache BiocFileCache
 .get_cache <- function() {
-  cache <- R_user_dir("motifbreakR", which="cache")
+  cache <- tools::R_user_dir("motifbreakR", which="cache")
   BiocFileCache(cache = cache, ask = F)
 }
 
+#' @importFrom BiocFileCache bfcquery bfcadd bfcneedsupdate bfcdownload bfcrpath
 cachePeakFile <- function(fileURL, genome) {
   bfc <- .get_cache()
   rname <- paste("remap2022", genome, sep = "_")
-  rid <- bfcquery(bfc, genome, "rname")$rid
+  rid <- bfcquery(bfc, rname, "rname")$rid
   if (!length(rid)) {
     rid <- names(bfcadd(bfc, rname, fileURL, ext = ".Rdata", download = FALSE))
   }
@@ -1441,17 +1508,22 @@ cachePeakFile <- function(fileURL, genome) {
   bfcrpath(bfc, rids = rid)
 }
 
-#' @importFrom vroom vroom
-loadPeakFile2 <- function(url_list, genome) {
-  peak_path <- cachePeakFile(url_list[[genome]], genome)
-  remap_peaks <- GRanges(vroom(peak_path, delim = "\t",
-                               col_names = c("chr", "start", "end", "name",
-                                             "score", "strand", "tstart",
-                                             "tend", "color"),
-                               col_types = c("ciiciciic"),
-                               col_select = c(chr, start, end, name),
-                               progress = FALSE))
-  return(remap_peaks)
+cacheMartObj <- function(genome) {
+  bfc <- .get_cache()
+  genome_ver <- ifelse(is.null(genome), "hg38", genome)
+  rname <- paste("ensembl_mart", genome_ver, sep = "_")
+  rid <- bfcquery(bfc, rname, "rname")$rid
+  if (!length(rid)) {
+    rid <- names(bfcnew(bfc, rname, ext = ".Rdata"))
+    bmsnp <- useEnsembl(biomart = 'snps', dataset = "hsapiens_snp", version = genome)
+    saveRDS(bmsnp, file = bfcrpath(bfc, rids = rid))
+  }
+  days.old <- as.numeric(Sys.Date() - as.Date(bfcquery(bfc, field = "rid", rid)$create_time))
+  if (days.old > 30) {
+    bmsnp <- useEnsembl(biomart = 'snps', dataset = "hsapiens_snp", version = genome)
+    saveRDS(bmsnp, file = bfcrpath(bfc, rids = rid))
+  }
+  bfcrpath(bfc, rids = rid)
 }
 
 loadPeakFile <- function(url_list, genome) {
@@ -1460,6 +1532,13 @@ loadPeakFile <- function(url_list, genome) {
   return(remap_peaks)
 }
 
+loadMartObj <- function(genome) {
+  mart_path <- cacheMartObj(genome)
+  mart_obj <- readRDS(mart_path)
+  return(mart_obj)
+}
+
+#' @importFrom vroom vroom
 convertPeakFile <- function(from, to) {
   message("processing peak file")
   remap_peaks <- GRanges(vroom(from, delim = "\t",
