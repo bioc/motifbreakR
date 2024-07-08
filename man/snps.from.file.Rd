@@ -37,8 +37,14 @@ see \code{\link[BSgenome]{available.genomes}} for a list of species}
 
 \item{indels}{Logical; allow the import of indels.}
 
+\item{biomart.dataset}{a Mart object from \code{\link{useEnsembl}} specifying
+the \code{snps} biomart, which dataset i.e., \code{hsapiens_snp}, and which
+version i.e., \code{111} or \code{GRCm39}. This will override \code{SNPlocs} and must
+be compatible with search.genome selection, and will query from \code{biomaRt},
+which may be considerably faster than a lookup from a \code{SNPlocs} object.}
+
 \item{check.unnamed.for.rsid}{Logical; check snps in the form chr:pos:ref:alt
-for corresponding rsid, lookup may be slow, requires param dbSNP.}
+for corresponding rsid, lookup may be slow, requires either param dbSNP or biomart.dataset.}
 }
 \value{
 a GRanges object containing:

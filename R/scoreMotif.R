@@ -1386,6 +1386,19 @@ exportMBbed <- function(results, file, name = NULL, color = "effect_size") {
 #' @details \code{TFClass} argument works for objects loaded in from the
 #' \code{MotifDb} package. \code{hg19} and \code{mm39} are data from liftOver.
 #'
+#' The ReMap catalogues (2022, 2020, 2018, 2015) are under CC BY-NC 4.0
+#' international license, as described in ReMap.
+#'
+#' The CC BY-NC 4.0 license correspond to the following terms:
+#' Attribution — You must give appropriate credit, provide a link to the
+#' license, and indicate if changes were made. You may do so in any reasonable
+#' manner, but not in any way that suggests the licensor endorses you or your
+#' use.
+#' NonCommercial — You may not use the material for commercial purposes.
+#' No additional restrictions — You may not apply legal terms or technological
+#' measures that legally restrict others from doing anything the license
+#' permits.
+#'
 #' @seealso \code{\link{associateTranscriptionFactors}} for information about
 #' TFClass. \url{https://remap.univ-amu.fr/} for details about ReMap2022.
 #' @return the results GenomicRanges object output by \code{\link{motifbreakR}}

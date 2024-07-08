@@ -7,9 +7,9 @@
 #'  see \code{\link[BSgenome]{available.genomes}} for a list of species.
 #' @param biomart.dataset a Mart object from \code{\link{useEnsembl}} specifying
 #'  the \code{snps} biomart, which dataset i.e., \code{hsapiens_snp}, and which
-#'  version i.e., \code{111} or \code{GRCm39}. This wilSNP and must
-#'  be compatible with search.genome selections, and rather query from biomaRt,
-#'  which may be considerably faster than a lookup from a SNPlocs object.
+#'  version i.e., \code{111} or \code{GRCm39}. This will override \code{SNPlocs} and must
+#'  be compatible with search.genome selection, and will query from \code{biomaRt},
+#'  which may be considerably faster than a lookup from a \code{SNPlocs} object.
 #' @seealso See \code{\link{motifbreakR}} for analysis; See \code{\link{snps.from.file}}
 #'   for an alternate method for generating a list of variants.
 #' @details \code{snps.from.rsid} take an rsid, or character vector of rsids and
@@ -70,35 +70,7 @@ snps.from.rsid <- function(rsid = NULL, dbSNP = NULL,
                     filters = c("snp_filter", "chr_name"),
                     values = list(rsid, ens.seqlevel),
                     mart = biomart.dataset)
-    bm.snp$split_id <- factor(bm.snp$refsnp_id)
-    bm.snp <- bm.snp[order(bm.snp$split_id),]
-    allele <- stringr::str_split(bm.snp$allele, pattern = "/")
-    snps.ref <- vapply(allele,
-                       function(x) {
-                         x[[1]]
-                       }, character(1))
-    snps.alt.split <- Map(f = function(x,y) {
-      x[2:y]
-    }, allele, lengths(allele))
-    bm.snp <- split(bm.snp, bm.snp$refsnp_id, )
-    rep.vars <- vapply(snps.alt.split, length, integer(1))
-    bm.snp <- rep(bm.snp, rep.vars)
-    snps.ref <- rep(snps.ref, rep.vars)
-    snps.alt <- unlist(snps.alt.split)
-    bm.snp <- do.call(rbind, bm.snp)
-    bm.snp$SNP_id <- bm.snp$refsnp_id
-    bm.snp$REF <- snps.ref
-    bm.snp$ALT <- snps.alt
-    ens.genome <- searchDatasets(biomart.dataset, pattern = biomart.dataset@dataset)$version[[1]]
-    ens.genome <- Seqinfo(genome = ens.genome)
-    bm.snp <- with(bm.snp, GRanges(seqnames = chr_name,
-                                   ranges = IRanges(start = chrom_start,
-                                                    end = chrom_end),
-                                   SNP_id = SNP_id,
-                                   REF = DNAStringSet(REF),
-                                   ALT = DNAStringSet(ALT),
-                                   seqinfo = ens.genome))
-    names(bm.snp) <- bm.snp$SNP_id
+    bm.snp <- biomartToGranges(bm.snp, biomart.dataset)
     bm.snp <- sort(formatVcfOut(bm.snp, search.genome))
     return(bm.snp)
   }
@@ -160,7 +132,7 @@ change.to.search.genome <- function(granges.object, search.genome) {
       seqlevelsStyle(granges.object) <- seqlevelsStyle(search.genome)
     }
     normal.xome <- seqlevels(granges.object)[(regexpr("_", seqlevels(granges.object)) < 0)]
-    positions <- unlist(sapply(paste0(normal.xome, "$"), grep, seqnames(seqinfo(search.genome))))
+    positions <- unlist(sapply(paste0("^", normal.xome, "$"), grep, seqnames(seqinfo(search.genome))))
     new2oldmap <- rep(NA, length(seqinfo(search.genome)))
     new2oldmap[positions] <- 1:length(positions)
     seqinfo(granges.object, new2old = new2oldmap) <- seqinfo(search.genome)
@@ -169,6 +141,40 @@ change.to.search.genome <- function(granges.object, search.genome) {
   return(granges.object)
 }
 
+biomartToGranges <- function(bm.snp, biomart.dataset) {
+  bm.snp$split_id <- factor(bm.snp$refsnp_id)
+  bm.snp <- bm.snp[order(bm.snp$split_id),]
+  allele <- strsplit(bm.snp$allele, split = "/")
+  snps.ref <- vapply(allele,
+                     function(x) {
+                       x[[1]]
+                     }, character(1))
+  snps.alt.split <- Map(f = function(x,y) {
+    x[2:y]
+  }, allele, lengths(allele))
+  bm.snp <- split(bm.snp, bm.snp$refsnp_id)
+  rep.vars <- vapply(snps.alt.split, length, integer(1))
+  bm.snp <- rep(bm.snp, rep.vars)
+  snps.ref <- rep(snps.ref, rep.vars)
+  snps.alt <- unlist(snps.alt.split)
+  bm.snp <- do.call(rbind, bm.snp)
+  bm.snp$SNP_id <- bm.snp$refsnp_id
+  bm.snp$REF <- snps.ref
+  bm.snp$ALT <- snps.alt
+  ens.genome <- searchDatasets(biomart.dataset, pattern = biomart.dataset@dataset)$version[[1]]
+  ens.genome <- Seqinfo(genome = ens.genome)
+  bm.snp <- with(bm.snp, GRanges(seqnames = chr_name,
+                                 ranges = IRanges(start = chrom_start,
+                                                  end = chrom_end),
+                                 SNP_id = SNP_id,
+                                 REF = DNAStringSet(REF),
+                                 ALT = DNAStringSet(ALT),
+                                 seqinfo = ens.genome))
+  # browser()
+  bm.snp <- keepSeqlevels(bm.snp, value = as.character(runValue(seqnames(bm.snp))), pruning.mode = "coarse")
+  names(bm.snp) <- bm.snp$SNP_id
+  return(bm.snp)
+}
 
 strSort <- function(x) {
   sapply(lapply(strsplit(x, NULL), sort), paste, collapse = "")
@@ -228,8 +234,13 @@ formatVcfOut <- function(x, gseq) {
 #'  see \code{\link[BSgenome]{available.genomes}} for a list of species
 #' @param format Character; one of \code{bed} or \code{vcf}
 #' @param indels Logical; allow the import of indels.
+#' @param biomart.dataset a Mart object from \code{\link{useEnsembl}} specifying
+#'  the \code{snps} biomart, which dataset i.e., \code{hsapiens_snp}, and which
+#'  version i.e., \code{111} or \code{GRCm39}. This will override \code{SNPlocs} and must
+#'  be compatible with search.genome selection, and will query from \code{biomaRt},
+#'  which may be considerably faster than a lookup from a \code{SNPlocs} object.
 #' @param check.unnamed.for.rsid Logical; check snps in the form chr:pos:ref:alt
-#'  for corresponding rsid, lookup may be slow, requires param dbSNP.
+#'  for corresponding rsid, lookup may be slow, requires either param dbSNP or biomart.dataset.
 #' @seealso See \code{\link{motifbreakR}} for analysis; See \code{\link{snps.from.rsid}}
 #'   for an alternate method for generating a list of variants.
 #' @details \code{snps.from.file} takes a character vector describing the file path
@@ -394,15 +405,44 @@ snps.from.file <- function(file = NULL, dbSNP = NULL, search.genome = NULL, form
       strand(snps.noid) <- "*"
       names(snps.noid) <- paste(as.character(snps.noid), snps.ref, snps.alt, sep = ":")
       if(check.unnamed.for.rsid) {
-        snps.noid <- change.to.search.genome(snps.noid, dbSNP)
-        snps.actually.name <- GRanges(snpsByOverlaps(dbSNP, snps.noid, drop.rs.prefix = FALSE))
-        which.actually.name <- findOverlaps(snps.actually.name, snps.noid)
+        if(is.null(biomart.dataset)){
+          snps.noid <- change.to.search.genome(snps.noid, dbSNP)
+          snps.actually.name <- GRanges(snpsByOverlaps(dbSNP, snps.noid, drop.rs.prefix = FALSE))
+          which.actually.name <- findOverlaps(snps.actually.name, snps.noid)
+        } else {
+          ens.genome <- searchDatasets(biomart.dataset, pattern = biomart.dataset@dataset)$version[[1]]
+          ens.genome <- Seqinfo(genome = ens.genome)
+          seqlevelsStyle(snps.noid) <- seqlevelsStyle(ens.genome)
+          snps.noid.original <- snps.noid
+          snps.noid <- as.character(snps.noid)
+          snps.noid.add.end <- snps.noid[attr(regexpr(":", snps.noid), "match.length") < 2]
+          snps.noid.keep <- snps.noid[!(attr(regexpr(":", snps.noid), "match.length") < 2)]
+          snps.noid.add.end <- strsplit(snps.noid.add.end, ":")
+          snps.noid.add.end <- vapply(snps.noid.add.end, function(x) { paste(x[1], x[2], x[2], sep = ":")}, FUN.VALUE = character(1))
+          snps.noid <- c(snps.noid.keep, snps.noid.add.end)
+          rm(snps.noid.add.end, snps.noid.keep)
+          seqlevelsStyle(ens.genome) <- seqlevelsStyle(search.genome)
+          compatible_genome <- genome(ens.genome)[[1]] == genome(search.genome)[[1]]
+          if(!compatible_genome) stop("bioMart genome and BSgenome are not compatible")
+          bm.snp <- getBM(attributes = c('refsnp_id','chr_name','chrom_start','chrom_end','allele'),
+                          filters = c("chromosomal_region"),
+                          values = list(snps.noid),
+                          mart = biomart.dataset)
+          bm.snp <- biomartToGranges(bm.snp, biomart.dataset)
+          bm.snp <- subsetByOverlaps(bm.snp, snps.noid.original, type = "equal")
+          ohits <- findOverlaps(bm.snp, snps.noid.original, type = "equal")
+          snp.add.id <- snps.noid.original[subjectHits(ohits)]$ALT == bm.snp[queryHits(ohits)]$ALT
+          snps.actually.name <- bm.snp
+          snps.actually.name$RefSNP_id <- snps.actually.name$SNP_id
+          which.actually.name <- ohits[snp.add.id]
+          snps.noid <- snps.noid.original; rm(snps.noid.original)
+        }
         if(length(which.actually.name) > 0) {
           if(length(which.actually.name) < 50) {
-          warning(paste0(snps.actually.name[queryHits(which.actually.name)]$RefSNP_id,
-                         " was found as a match for ",
-                         snps.noid[subjectHits(which.actually.name),]$name,
-                         "; using entry from dbSNP\n  "))
+            warning(paste0(snps.actually.name[queryHits(which.actually.name)]$RefSNP_id,
+                           " was found as a match for ",
+                           snps.noid[subjectHits(which.actually.name),]$name,
+                           "; using entry from dbSNP\n  "))
           } else {
             warning(length(which.actually.name), " variants had names replaced using entries from dbSNP")
           }

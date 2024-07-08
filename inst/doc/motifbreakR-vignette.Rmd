@@ -26,15 +26,15 @@ options(width=100)
 knitr::opts_chunk$set(cache=TRUE, autodep=TRUE)
 ```
 # Introduction
-This document offers an introduction and overview of `r Githubpkg("Simon-Coetzee/motifBreakR")`, which allows the biologist to judge whether the sequence surrounding a polymorphism or mutation is a good match to known transcription factor binding sites, and how much information is gained or lost in one allele of the polymorphism relative to another or mutation vs. wildtype. `r Githubpkg("Simon-Coetzee/motifBreakR")` is flexible, giving a choice of algorithms for interrogation of genomes with motifs from public sources that users can choose from; these are 1) a weighted-sum, 2) log-probabilities, and 3) relative entropy. `r Githubpkg("Simon-Coetzee/motifBreakR")` can predict effects for novel or previously described variants in public databases, making it suitable for tasks beyond the scope of its original design. Lastly, it can be used to interrogate any genome curated within Bioconductor.
+This document offers an introduction and overview of `r Biocpkg("motifbreakR")`, which allows the biologist to judge whether the sequence surrounding a polymorphism or mutation is a good match to known transcription factor binding sites, and how much information is gained or lost in one allele of the polymorphism relative to another or mutation vs. wildtype. `r Biocpkg("motifbreakR")` is flexible, giving a choice of algorithms for interrogation of genomes with motifs from public sources that users can choose from; these are 1) a weighted-sum, 2) log-probabilities, and 3) relative entropy. `r Biocpkg("motifbreakR")` can predict effects for novel or previously described variants in public databases, making it suitable for tasks beyond the scope of its original design. Lastly, it can be used to interrogate any genome curated within Bioconductor.
 
-`r Githubpkg("Simon-Coetzee/motifBreakR")` works with position probability matrices (PPM). PPM are derived as the fractional occurrence of nucleotides A,C,G, and T at each position of a position frequency matrix (PFM). PFM are simply the tally of each nucleotide at each position across a set of aligned sequences. With a PPM, one can generate probabilities based on the genome, or more practically, create any number of position specific scoring matrices (PSSM) based on the principle that the PPM contains information about the likelihood of observing a particular nucleotide at a particular position of a true transcription factor binding site.
+`r Biocpkg("motifbreakR")` works with position probability matrices (PPM). PPM are derived as the fractional occurrence of nucleotides A,C,G, and T at each position of a position frequency matrix (PFM). PFM are simply the tally of each nucleotide at each position across a set of aligned sequences. With a PPM, one can generate probabilities based on the genome, or more practically, create any number of position specific scoring matrices (PSSM) based on the principle that the PPM contains information about the likelihood of observing a particular nucleotide at a particular position of a true transcription factor binding site.
 
-This guide includes a brief overview of the [processing flow](#flow), an example focusing more in depth on the [practical](#practical) aspect of using `r Githubpkg("Simon-Coetzee/motifBreakR")`, and finally a detailed section on the [scoring methods](#methods) employed by the package.
+This guide includes a brief overview of the [processing flow](#flow), an example focusing more in depth on the [practical](#practical) aspect of using `r Biocpkg("motifbreakR")`, and finally a detailed section on the [scoring methods](#methods) employed by the package.
 
 
 # Processing overview {#flow}
-`r Githubpkg("Simon-Coetzee/motifBreakR")` may be used to interrogate SNPs or SNVs for their potential effect on transcription factor binding by examining how the two alleles of the variant effect the binding score of a motif.  The basic process is outlined in the figure below.
+`r Biocpkg("motifbreakR")` may be used to interrogate SNPs or SNVs for their potential effect on transcription factor binding by examining how the two alleles of the variant effect the binding score of a motif.  The basic process is outlined in the figure below.
 
 ## Outline of process
 
@@ -54,24 +54,24 @@ This straightforward process allows the interrogation of SNPs and SNVs in the co
 [^homer]: Website: [Homer](http://homer.salk.edu/homer/index.html)
   Paper: [http://www.sciencedirect.com/science/article/pii/S1097276510003667](http://dx.doi.org/10.1016/j.molcel.2010.05.004)
 
-Practically `r Githubpkg("Simon-Coetzee/motifBreakR")` has involves three phases.
+Practically `r Biocpkg("motifbreakR")` has involves three phases.
 
-1. *Read in Single Nucleotide Variants:* The first step is to read in the list of variants.  Variants can be a list of rsIDs if your SNPs are represented in one of the SNPlocs packages, may be included as a [.bed](http://www.genome.ucsc.edu/FAQ/FAQformat.html#format1) file with a specifically formatted name field, or may be provided as a [.vcf](http://www.1000genomes.org/wiki/analysis/variant%20call%20format/vcf-variant-call-format-version-41) file. We then transform these input such that it may be read my `r Githubpkg("Simon-Coetzee/motifBreakR")`.
-2. *Find Broken Motifs:* Next we present `r Githubpkg("Simon-Coetzee/motifBreakR")` with the input generated in the previous step, along with a set of motifs formatted as class `MotifList`, and your preferred [scoring method](#methods). 
+1. *Read in Single Nucleotide Variants:* The first step is to read in the list of variants.  Variants can be a list of rsIDs if your SNPs are represented in one of the SNPlocs packages, may be included as a [.bed](http://www.genome.ucsc.edu/FAQ/FAQformat.html#format1) file with a specifically formatted name field, or may be provided as a [.vcf](http://www.1000genomes.org/wiki/analysis/variant%20call%20format/vcf-variant-call-format-version-41) file. We then transform these input such that it may be read my `r Biocpkg("motifbreakR")`.
+2. *Find Broken Motifs:* Next we present `r Biocpkg("motifbreakR")` with the input generated in the previous step, along with a set of motifs formatted as class `MotifList`, and your preferred [scoring method](#methods). 
 3. *Visualize SNPs and motifs:* Finally we can visualize which motifs are broken by any individual SNP using our plotting function.
 
 # How To Use motifbreakR: A Practical Example {#practical}
-This section offers an example of how to use `r Githubpkg("Simon-Coetzee/motifBreakR")` to identify potentially disrupted transcription factor binding sites due to 701 SNPs output from a `r Biocpkg("FunciSNP")` analysis of Prostate Cancer (PCa) genome wide association studies (GWAS) risk loci.
+This section offers an example of how to use `r Biocpkg("motifbreakR")` to identify potentially disrupted transcription factor binding sites due to 701 SNPs output from a `r Biocpkg("FunciSNP")` analysis of Prostate Cancer (PCa) genome wide association studies (GWAS) risk loci.
 The SNPs are included in this package here:
 ```{r start, cache=TRUE, message=FALSE}
 library(motifbreakR)
 pca.snps.file <- system.file("extdata", "pca.enhancer.snps", package = "motifbreakR")
 pca.snps <- as.character(read.table(pca.snps.file)[,1])
 ```
-The simplest form of a `r Githubpkg("Simon-Coetzee/motifBreakR")` analysis is summarized as follows:
+The simplest form of a `r Biocpkg("motifbreakR")` analysis is summarized as follows:
 ```{r outline, eval=FALSE}
 variants <- snps.from.rsid(rsid = pca.snps,
-                           dbSNP = SNPlocs.Hsapiens.dbSNP142.GRCh37,
+                           dbSNP = SNPlocs.Hsapiens.dbSNP144.GRCh37,
                            search.genome = BSgenome.Hsapiens.UCSC.hg19)
 motifbreakr.results <- motifbreakR(snpList = variants, pwmList = MotifDb, threshold = 0.9)
 plotMB(results = motifbreakr.results, rsid = "rs7837328", effect = "strong")
@@ -96,21 +96,31 @@ More to the point here are the two methods for reading in the variants.
 
 ### SNPs from rsID:
 
-
-
-We use the `r Biocannopkg("SNPlocs.Hsapiens.dbSNP142.GRCh37")` which is the SNP locations and alleles defined in [dbSNP142](http://www.ncbi.nlm.nih.gov/projects/SNP/snp_summary.cgi?view+summary=view+summary&build_id=142) as a source for looking up our rsIDs and `r Biocannopkg("BSgenome.Hsapiens.UCSC.hg19")` which holds the reference sequence for [UCSC genome build hg19](http://www.ncbi.nlm.nih.gov/assembly/2758/). Additional SNPlocs packages are availble from Bioconductor.
+We use the `r Biocannopkg("SNPlocs.Hsapiens.dbSNP144.GRCh37")` which is the SNP locations and alleles defined in [dbSNP144](http://www.ncbi.nlm.nih.gov/projects/SNP/snp_summary.cgi?view+summary=view+summary&build_id=144) as a source for looking up our rsIDs and `r Biocannopkg("BSgenome.Hsapiens.UCSC.hg19")` which holds the reference sequence for [UCSC genome build hg19](http://www.ncbi.nlm.nih.gov/assembly/2758/). Additional SNPlocs packages are availble from Bioconductor.
 
 ```{r fromrsid, message=FALSE, cache=TRUE}
-library(SNPlocs.Hsapiens.dbSNP142.GRCh37) # dbSNP142 in hg19
-library(BSgenome.Hsapiens.UCSC.hg19)     # hg19 genome
+library(SNPlocs.Hsapiens.dbSNP144.GRCh37) # dbSNP144 in hg19
+library(BSgenome.Hsapiens.UCSC.hg19)      # hg19 genome
 head(pca.snps)
 snps.mb <- snps.from.rsid(rsid = pca.snps,
-                          dbSNP = SNPlocs.Hsapiens.dbSNP142.GRCh37,
+                          dbSNP = SNPlocs.Hsapiens.dbSNP144.GRCh37,
                           search.genome = BSgenome.Hsapiens.UCSC.hg19)
 snps.mb
 ```
 
-A far greater variety of variants may be read into `r Githubpkg("Simon-Coetzee/motifBreakR")` via the `snps.from.file` function. In fact `r Githubpkg("Simon-Coetzee/motifBreakR")` will work with any organism present as a Bioconductor `r Biocpkg("BSgenome")` package. This includes 76 genomes representing 22 species.
+Sometimes querying a large number of variants from the SNPlocs packages can be very slow. If you find this to be the case, we have implemented querying from [Ensembl BioMart](http://useast.ensembl.org/biomart/martview) using the `r Biocpkg("biomaRt")` package. All that's required is first generating the mart object, and using that instead of a dbSNP object with the `biomart.dataset` argument.
+
+```{r biomart_rsid, message=FALSE, cache=TRUE}
+library(biomaRt)
+ensembl_snp <- useEnsembl(biomart = "snps",
+                          dataset = "hsapiens_snp",
+                          version = "GRCh37")
+snps.mb <- snps.from.rsid(rsid = pca.snps,
+                          biomart.dataset = ensembl_snp,
+                          search.genome = BSgenome.Hsapiens.UCSC.hg19)
+```
+
+A far greater variety of variants may be read into `r Biocpkg("motifbreakR")` via the `snps.from.file` function. In fact `r Biocpkg("motifbreakR")` will work with any organism present as a Bioconductor `r Biocpkg("BSgenome")` package. This includes 113 genomes representing 33 species.
 
 ```{r whichgenome, message=FALSE, cache=TRUE}
 library(BSgenome)
@@ -127,12 +137,14 @@ snps.bed.file <- system.file("extdata", "snps.bed", package = "motifbreakR")
 # see the contents
 read.table(snps.bed.file, header = FALSE)
 ```
+
 Seeing as we have some SNPs listed by their rsIDs we can query those by including a SNPlocs object as an argument to `snps.from.file`
+
 ```{r getbedrs, message=TRUE, cache=TRUE}
-library(SNPlocs.Hsapiens.dbSNP142.GRCh37)
+library(SNPlocs.Hsapiens.dbSNP144.GRCh37)
 #import the BED file
 snps.mb.frombed <- snps.from.file(file = snps.bed.file,
-                                  dbSNP = SNPlocs.Hsapiens.dbSNP142.GRCh37,
+                                  dbSNP = SNPlocs.Hsapiens.dbSNP144.GRCh37,
                                   search.genome = BSgenome.Hsapiens.UCSC.hg19,
                                   format = "bed")
 snps.mb.frombed
@@ -182,7 +194,7 @@ See `?motifbreakR_motif` for more information and citations.
 
 Some of our data sets include a sequenceCount. These include `FlyFactorSurvey`, `hPDI`, `JASPAR_2014`, `JASPAR_CORE`, and `jolma2013` from `r Biocpkg("MotifDb")` and `HOCOMOCO` from the set of `motifbreakR_motif`. Using these we calculate a pseudocount to allow us to calculate the logarithms in the case where we have a `0` in a pwm.  The calculation for incorporating pseudocounts is `ppm <- (ppm * sequenceCount + 0.25)/(sequenceCount + 1)`.  If the sequenceCount for a particular ppm is `NA` we use 20 as a default sequenceCount.
 
-Now that we have the three necessary components to run `r Githubpkg("Simon-Coetzee/motifBreakR")`:
+Now that we have the three necessary components to run `r Biocpkg("motifbreakR")`:
 
 1. A `BSgenome` object for our organism, in this case `BSgenome.Hsapiens.UCSC.hg19`
 2. A `MotifList` object containing our motifs, in this case `hocomoco`,
@@ -235,7 +247,7 @@ plotMB(results = results, rsid = "rs1006140", effect = "strong")
 
 
 # Methods {#methods}
-`r Githubpkg("Simon-Coetzee/motifBreakR")` works with position probability matrices (PPM). PPM
+`r Biocpkg("motifbreakR")` works with position probability matrices (PPM). PPM
 are derived as the fractional occurrence of nucleotides A,C,G, and T at
 each position of a position frequency matrix (PFM). PFM are simply the
 tally of each nucleotide at each position across a set of aligned
@@ -245,7 +257,7 @@ scoring matrices (PSSM) based on the principle that the PPM contains
 information about the likelihood of observing a particular nucleotide at
 a particular position of a true transcription factor binding site. What
 follows is a discussion of the three different algorithms that may be
-employed in calls to the `r Githubpkg("Simon-Coetzee/motifBreakR")` function via the `method`
+employed in calls to the `r Biocpkg("motifbreakR")` function via the `method`
 argument.
 
 Suppose we have a frequency matrix $M$ of width $n$ (*i.e.* a
@@ -305,7 +317,7 @@ Thus, there are 3 possible algorithms to apply via the `method`
 argument. The first is the standard summation of log probabilities
 (`method='log'`). The second and third are the weighted sum and
 information content methods (`method='default'` and `method='ic'`) specified by
-equations for [Weighted Sum](#eqn4.1) and [Relative Entropy](#eqn4.2), respectively. `r Githubpkg("Simon-Coetzee/motifBreakR")` assumes a
+equations for [Weighted Sum](#eqn4.1) and [Relative Entropy](#eqn4.2), respectively. `r Biocpkg("motifbreakR")` assumes a
 uniform background nucleotide distribution ($b$) in equations [4.1](#eqn1) and
 [4.5](#eqn4.1) unless otherwise specified by the user. Since we are primarily
 interested in the difference between alleles, background frequency is
@@ -314,7 +326,7 @@ inclusion of background frequency introduces potential bias when
 collections of motifs are employed, since motifs are themselves
 unbalanced with respect to nucleotide composition. With these cautions
 in mind, users may override the uniform distribution if so desired. For
-all three methods, `r Githubpkg("Simon-Coetzee/motifBreakR")` scores and reports the reference
+all three methods, `r Biocpkg("motifbreakR")` scores and reports the reference
 and alternate alleles of the sequence
 ($F( s_{\textrm{REF}},M )$ and
 $F( s_{\textrm{ALT}},M )$), and provides the matrix scores
@@ -324,7 +336,7 @@ the motif matrix, $M$. If either of
 $F( s_{\textrm{REF}},M )$ and
 $F( s_{\textrm{ALT}},M )$ is greater than a user-specified
 threshold (default value of 0.85) the SNP is reported. By default
-`r Githubpkg("Simon-Coetzee/motifBreakR")` does not display neutral effects,
+`r Biocpkg("motifbreakR")` does not display neutral effects,
 ($\Delta p_{i} < 0.4$) but this behaviour can be
 overridden.
 
@@ -334,7 +346,14 @@ This is unfortunately a two step process. First, by invoking `filterp=TRUE` and 
 a desired p-value e.g 1e-4, we perform a rough filter on the results by rounding all values in the PWM to two
 decimal place, and calculating a scoring threshold based upon that. The second step is to use the function `calculatePvalue()`
 on a selection of results which will change the `Refpvalue` and `Altpvalue` columns in the output from `NA` to the p-value
-calculated by `TFMsc2pv`.  This can be (although not always) a very memory and time intensive process if the algorithm doesn't converge rapidly.
+calculated by `TFMsc2pv`.  This can be (although not always) a very memory and time intensive process if the algorithm doesn't converge rapidly. `calculatePvalue()` may be sped up with the new argument `granularity`, where one may choose speed up calculations by reducing the level of granularity in the p-value calculation. The selecting a level of granularity generates a round matrix where we "Let $M$ be a matrix of real coefficient values ... and let $\epsilon$ be a positive real number. We denote $M_\epsilon$ the round matrix deduced from $M$ by rounding each value by $\epsilon$:"[^TFMPvalue]
+
+$$M_\epsilon(i, x) = \epsilon \lfloor \frac{M(i,x)}{\epsilon} \rfloor$$
+$\epsilon$ is called the granularity.
+
+[^TFMPvalue]: Package: [TFMPvalue on CRAN](https://cran.r-project.org/web/packages/TFMPvalue/index.html)
+  Paper: [Efficient and accurate P-value computation for Position Weight Matrices](https://doi.org/10.1186/1748-7188-2-15)
+  Definition 3 (Round matrix) from the section _Efficient algorithms for computing the P-value without error_
 
 # Session Info
 ```{r, cache=TRUE}

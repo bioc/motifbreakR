@@ -22,9 +22,9 @@ see \code{\link[BSgenome]{available.genomes}} for a list of species.}
 
 \item{biomart.dataset}{a Mart object from \code{\link{useEnsembl}} specifying
 the \code{snps} biomart, which dataset i.e., \code{hsapiens_snp}, and which
-version i.e., \code{111} or \code{GRCm39}. This wilSNP and must
-be compatible with search.genome selections, and rather query from biomaRt,
-which may be considerably faster than a lookup from a SNPlocs object.}
+version i.e., \code{111} or \code{GRCm39}. This will override \code{SNPlocs} and must
+be compatible with search.genome selection, and will query from \code{biomaRt},
+which may be considerably faster than a lookup from a \code{SNPlocs} object.}
 }
 \value{
 a GRanges object containing:
