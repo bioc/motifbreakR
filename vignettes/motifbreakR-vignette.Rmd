@@ -310,10 +310,24 @@ results
 
 ## *Export Results*
 
-There are two exports that `r BiocStyle::Biocpkg("motifbreakR")` can generate in addition to the figures.
+There are two exports that `r BiocStyle::Biocpkg("motifbreakR")` can generate in addition to the figures. We can export a table of results resembling the results object, either as CSV or TSV files.
+ 
+```{r exporttable, eval = FALSE}
+exportMBtable(results, file = "mb_test_output.tsv", format = "tsv")
+```
 
+Alternatively, we can export a BED file of results. The BED file represents the variants that interact with motifs. They are named by the variant name, reference and alternate alleles, and the name of the motif disrupted. The intervals may be colored with diverging color
+scale for effect_size (blue representing stronger binding in `REF`}`, red
+representing stronger binding in `ALT`), or a sequential color scale
+otherwise (low values as purple, high values as yellow). The score column is
+either the `effect_size` (`alleleDiff` column), the -log10(p-value)
+(capped at 10), corresponding to `Refpvalue`, `Altpvalue`, or the
+best match of the two, or the `score` `pctRef`, `pctAlt`, or the
+highest match of the two.
 
-
+```{r exportbed, eval=FALSE}
+exportMBbed(results, file = "mb_test_output.bed", color = "effect_size")
+```
 
 # Methods {#methods}
 `r BiocStyle::Biocpkg("motifbreakR")` works with position probability matrices (PPM). PPM
