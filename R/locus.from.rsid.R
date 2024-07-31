@@ -32,7 +32,7 @@
 #'  ## alternatively using biomaRt
 #'
 #'  library(biomaRt)
-#'  library(BSgenome.Hsapiens.UCSC.hg19)
+#'  library(BSgenome.Hsapiens.UCSC.hg38)
 #'  ensembl_snp <- useEnsembl(biomart = "snps",
 #'                            dataset = "hsapiens_snp",
 #'                            version = "112")
@@ -171,7 +171,7 @@ biomartToGranges <- function(bm.snp, biomart.dataset) {
                                  ALT = DNAStringSet(ALT),
                                  seqinfo = ens.genome))
   # browser()
-  bm.snp <- keepSeqlevels(bm.snp, value = as.character(runValue(seqnames(bm.snp))), pruning.mode = "coarse")
+  bm.snp <- keepSeqlevels(bm.snp, value = unique(as.character(runValue(seqnames(bm.snp)))), pruning.mode = "coarse")
   names(bm.snp) <- bm.snp$SNP_id
   return(bm.snp)
 }
@@ -268,7 +268,7 @@ formatVcfOut <- function(x, gseq) {
 #'                            search.genome = BSgenome.Drerio.UCSC.danRer7,
 #'                            format = "bed")
 #'
-#' @importFrom rtracklayer import
+#' @importFrom rtracklayer import export.bed
 #' @importFrom Biostrings IUPAC_CODE_MAP uniqueLetters BStringSetList DNA_ALPHABET
 #' @importFrom VariantAnnotation readVcf ref alt isSNV VcfFile ScanVcfParam
 #' @importFrom SummarizedExperiment rowRanges

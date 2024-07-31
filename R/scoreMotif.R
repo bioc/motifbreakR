@@ -1218,7 +1218,7 @@ plotMB <- function(results, rsid, reverseMotif = TRUE, effect = c("strong", "wea
 shiny_motifbreakR <- function() {
   appDir <- system.file("shiny", "shiny_motif", package = "motifbreakR")
   if (appDir == "") {
-    stop("Could not find example directory. Try re-installing `mypackage`.", call. = FALSE)
+    stop("Could not find example directory. Try re-installing `motifbreakR`.", call. = FALSE)
   }
   shinyAppDir(appDir)
 }
@@ -1238,6 +1238,7 @@ shiny_motifbreakR <- function() {
 #' \donttest{
 #' exportMBtable(example.results, file = "mb_test_output.tsv", format = "tsv")
 #' }
+#' @importFrom utils write.csv write.table
 #' @export
 exportMBtable <- function(results, file, format = "tsv") {
   if(missing(file)) {stop("select output file location")}
@@ -1249,14 +1250,16 @@ exportMBtable <- function(results, file, format = "tsv") {
   results <- results[, !colnames(results) %in% "width"]
   results$start <- results$start - 1
   results$motifPos <- vapply(results$motifPos, function(x) { paste0(x[1], ";", x[2]) }, FUN.VALUE = character(1))
-  results$matchingBindingEvent <- vapply(results$matchingCellType, function(x) {
-    collapsed_data <- lapply(x, function(y) {
-      paste0(y, collapse = "; ")})
-    collapsed_data <- paste0(names(collapsed_data), ":(", collapsed_data, ")")
-    collapsed_data <- paste(collapsed_data, collapse = "; ")
-    ifelse(collapsed_data == ":(NA)", NA_character_, collapsed_data)
-  }, FUN.VALUE = character(1))
-  results$matchingCellType <- NULL
+  if("matchingCellType" %in% colnames(results)) {
+    results$matchingBindingEvent <- vapply(results$matchingCellType, function(x) {
+      collapsed_data <- lapply(x, function(y) {
+        paste0(y, collapse = "; ")})
+      collapsed_data <- paste0(names(collapsed_data), ":(", collapsed_data, ")")
+      collapsed_data <- paste(collapsed_data, collapse = "; ")
+      ifelse(collapsed_data == ":(NA)", NA_character_, collapsed_data)
+    }, FUN.VALUE = character(1))
+    results$matchingCellType <- NULL
+  }
   if(format == "tsv") {
     write.table(x = results, file = file, quote = FALSE, sep = sep, row.names = FALSE)
   } else {
@@ -1279,6 +1282,7 @@ get_color_values <- function(bed_score, color_set) {
 #'
 #' @param results The output of \code{\link{motifbreakR}}
 #' @param file Character; the file name of the destination file
+#' @param name Character; name for the BED track, defaults to "motifbreakR results"
 #' @param color Character; one of ref_sig (\code{Refpvalue}), alt_sig
 #' (\code{Altpvalue}), best_sig (lowest between \code{Refpvalue} and
 #' \code{Altpvalue}), (each of which require pre-computation of p-values with
@@ -1424,13 +1428,13 @@ findSupportingRemapPeaks <- function(results, genome, TFClass = FALSE) {
          mm39 = message("mm39 peaks have been lifted over from mm10"))
 
   remap_links <- list(
-    hg38      = "https://remap.univ-amu.fr/storage/remap2022/hg38/MACS2/remap2022_nr_macs2_hg38_v1_0.bed.gz",
-    hg19      = "https://remap.univ-amu.fr/storage/remap2022/hg19/MACS2/remap2022_nr_macs2_hg19_v1_0.bed.gz",
-    mm10      = "https://remap.univ-amu.fr/storage/remap2022/mm10/MACS2/remap2022_nr_macs2_mm10_v1_0.bed.gz",
-    mm39      = "https://remap.univ-amu.fr/storage/remap2022/mm39/MACS2/remap2022_nr_macs2_mm39_v1_0.bed.gz",
-    dm6       = "https://remap.univ-amu.fr/storage/remap2022/dm6/MACS2/remap2022_nr_macs2_dm6_v1_0.bed.gz",
-    TAIR10_TF = "https://remap.univ-amu.fr/storage/remap2022/tair10/tf/MACS2/remap2022_nr_macs2_TAIR10_v1_0.bed.gz",
-    TAIR10_HISTONE = "https://remap.univ-amu.fr/storage/remap2022/tair10/histones/MACS2/remap2022_histone_nr_macs2_TAIR10_v1_0.bed.gz"
+    hg38      = "https://remap.simoncoetzee.com/remap2022_nr_macs2_hg38_v1_0.bed.gz",
+    hg19      = "https://remap.simoncoetzee.com/remap2022_nr_macs2_hg19_v1_0.bed.gz",
+    mm10      = "https://remap.simoncoetzee.com/remap2022_nr_macs2_mm10_v1_0.bed.gz",
+    mm39      = "https://remap.simoncoetzee.com/remap2022_nr_macs2_mm39_v1_0.bed.gz",
+    dm6       = "https://remap.simoncoetzee.com/remap2022_nr_macs2_dm6_v1_0.bed.gz",
+    TAIR10_TF = "https://remap.simoncoetzee.com/remap2022_nr_macs2_TAIR10_v1_0.bed.gz",
+    TAIR10_HISTONE = "https://remap.simoncoetzee.com/remap2022_histone_nr_macs2_TAIR10_v1_0.bed.gz"
   )
 
   results$matchingBindingEvent <- NA
@@ -1505,7 +1509,7 @@ findSupportingRemapPeaks <- function(results, genome, TFClass = FALSE) {
   BiocFileCache(cache = cache, ask = F)
 }
 
-#' @importFrom BiocFileCache bfcquery bfcadd bfcneedsupdate bfcdownload bfcrpath
+#' @importFrom BiocFileCache bfcquery bfcadd bfcneedsupdate bfcdownload bfcrpath bfcnew
 cachePeakFile <- function(fileURL, genome) {
   bfc <- .get_cache()
   rname <- paste("remap2022", genome, sep = "_")
@@ -1513,7 +1517,12 @@ cachePeakFile <- function(fileURL, genome) {
   if (!length(rid)) {
     rid <- names(bfcadd(bfc, rname, fileURL, ext = ".Rdata", download = FALSE))
   }
-  if (!isFALSE(bfcneedsupdate(bfc, rid))) {
+  needupdate <- tryCatch(bfcneedsupdate(bfc, rid),
+                         error = function(cond) {
+                           message("URL is down, using cache if availible")
+                           FALSE
+                         })
+  if (!isFALSE(needupdate)) {
     message("downloading peak file")
     bfcdownload(bfc, rid, ask = FALSE, FUN=convertPeakFile)
     message("peak download complete")
@@ -1562,7 +1571,6 @@ convertPeakFile <- function(from, to) {
                                col_select = c(chr, start, end, name),
                                progress = FALSE))
   saveRDS(remap_peaks, file = to)
-  message("processing peak file")
   TRUE
 }
 

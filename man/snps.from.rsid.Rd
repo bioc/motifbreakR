@@ -53,7 +53,7 @@ Import SNPs from rsid for use in motifbreakR
  ## alternatively using biomaRt
 
  library(biomaRt)
- library(BSgenome.Hsapiens.UCSC.hg19)
+ library(BSgenome.Hsapiens.UCSC.hg38)
  ensembl_snp <- useEnsembl(biomart = "snps",
                            dataset = "hsapiens_snp",
                            version = "112")

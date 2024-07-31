@@ -1,9 +1,9 @@
 Package: motifbreakR
 Title: A Package For Predicting The Disruptiveness Of Single Nucleotide
         Polymorphisms On Transcription Factor Binding Sites
-Version: 2.19.2
+Version: 2.19.3
 Authors@R: c(person(given="Simon Gert", family="Coetzee",
-        email="simon.coetzee@cshs.org", role = c("aut", "cre")),
+        email="coetzee@uthscsa.edu", role = c("aut", "cre")),
         person(given="Dennis J.", family="Hazelett",
         email="dennis.hazelett@cshs.org", role = c("aut")))
 Description: We introduce motifbreakR, which allows the biologist to
@@ -26,12 +26,12 @@ Imports: methods, grDevices, stringr, parallel,
         BiocGenerics, S4Vectors (>= 0.9.25), IRanges, GenomeInfoDb,
         GenomicRanges, Biostrings, BSgenome, rtracklayer, VariantAnnotation,
         BiocParallel, motifStack, Gviz, matrixStats, TFMPvalue,
-        SummarizedExperiment, pwalign
+        SummarizedExperiment, pwalign, DT, bsicons, BiocFileCache, biomaRt,
+        bslib, shiny, vroom
 Suggests: BSgenome.Hsapiens.UCSC.hg19,
         SNPlocs.Hsapiens.dbSNP155.GRCh37, knitr, rmarkdown,
         BSgenome.Drerio.UCSC.danRer7, BiocStyle,
         BSgenome.Hsapiens.1000genomes.hs37d5,
-        BSgenome.Hsapiens.UCSC.hg19,
         BSgenome.Hsapiens.UCSC.hg19.masked,
         BSgenome.Hsapiens.NCBI.GRCh38,
         BSgenome.Hsapiens.UCSC.hg38.masked,

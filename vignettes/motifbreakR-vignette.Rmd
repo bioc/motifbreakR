@@ -285,13 +285,13 @@ shiny::runApp(app)
 
 While computational prediction of differential transcription factor binding potential based
 on sequence preference is the core of `r BiocStyle::Biocpkg("motifbreakR")`, grounding the analysis in observed
-transcription factor binding can improve the prioritization of results. ReMap [^remap2022] provides manually curated,
+transcription factor binding can improve the prioritization of results. ReMap[^remap2022] provides manually curated,
 high quality catalogs of regulatory regions based on DNA binding experiments in Human, Mouse, Fly and *Arabidopsis thaliana*
 
 We can annotate results with the ReMap sourced TF peaks corresponding to  to motif/transcription factor relationships
 provided by the constituent public `r Biocpkg("MotifDb")` sources. The user may optionally query an
 expanded motif/transcription factor relationship encompassing the entire potential
-transcription factor family as implemented by `r Biocpkg("MotifDb")` based on TFClass [^TFclass].
+transcription factor family as implemented by `r Biocpkg("MotifDb")` based on TFClass[^TFclass].
 
 ```{r findpeaks, eval=FALSE}
 results <- findSupportingRemapPeaks(results,
@@ -310,7 +310,9 @@ results
 
 ## *Export Results*
 
-There are 
+There are two exports that `r BiocStyle::Biocpkg("motifbreakR")` can generate in addition to the figures.
+
+
 
 
 # Methods {#methods}
@@ -422,7 +424,6 @@ The granularity in TFMPvalue paper is defined:
 "Let $M$ be a matrix of real coefficient values of length $m$ and let $\epsilon$ be a positive real number. We denote $M_\epsilon$ the round matrix deduced from $M$ by rounding each value by $\epsilon$:"
 
 $$M_\epsilon(i,x) = \epsilon \lfloor \frac{M(i,x)}{\epsilon} \rfloor$$
-"
 
 # Session Info
 ```{r, cache=TRUE}

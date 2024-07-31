@@ -11,6 +11,8 @@ exportMBbed(results, file, name = NULL, color = "effect_size")
 
 \item{file}{Character; the file name of the destination file}
 
+\item{name}{Character; name for the BED track, defaults to "motifbreakR results"}
+
 \item{color}{Character; one of ref_sig (\code{Refpvalue}), alt_sig
 (\code{Altpvalue}), best_sig (lowest between \code{Refpvalue} and
 \code{Altpvalue}), (each of which require pre-computation of p-values with
