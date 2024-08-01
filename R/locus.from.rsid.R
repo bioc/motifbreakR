@@ -134,7 +134,7 @@ change.to.search.genome <- function(granges.object, search.genome) {
     normal.xome <- seqlevels(granges.object)[(regexpr("_", seqlevels(granges.object)) < 0)]
     positions <- unlist(sapply(paste0("^", normal.xome, "$"), grep, seqnames(seqinfo(search.genome))))
     new2oldmap <- rep(NA, length(seqinfo(search.genome)))
-    new2oldmap[positions] <- 1:length(positions)
+    new2oldmap[positions] <- seq_len(length(positions))
     seqinfo(granges.object, new2old = new2oldmap) <- seqinfo(search.genome)
   }
   granges.object <- keepStandardChromosomes(granges.object, pruning.mode = "coarse")
